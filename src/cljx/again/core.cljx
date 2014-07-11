@@ -49,31 +49,37 @@
       (cons f
             (lazy-seq (max-duration (- timeout f) r))))))
 
-;; TODO: write a `with-retries` macro
-#_(defn retry
-  "Try applying `f` to `args`. Retry according to the retry-strategy
-  if `f` throws an Exception. `retry-strategy` is a list of delays:
-  `retry` will sleep the duration of the delay (in ms) between each
-  retries. The total number of tries is the number of elements in
-  `retry-strategy` plus one. A simple retry stategy would be: [100 100
-  100 100] which results in the operation being retried four
-  times (for a total of five tries) with 100ms sleeps in between
-  tries."
-  [retry-strategy f & args]
-  (let [res (try
-              {:value (apply f args)}
-              (catch Exception e
-                {:exception e}))]
-    (cond
-     ;; Return value
-     (contains? res :value) (:value res)
-     ;; Retry
-     (seq retry-strategy)
-     (let [[period & remaining-retries] retry-strategy]
-       (println "Retrying in %sms..." period)
-       ;; TODO: what to do in CLJS? Use core.async to support both hosts?
-       (Thread/sleep period)
-       (recur remaining-retries f args))
-     ;; Throw the exception
-     :else
-     (throw (:exception res)))))
+(defn sleep
+  "Delay execution for a given number of milliseconds."
+  [delay]
+  ;; TODO: what to do in CLJS? Use core.async to support both hosts?
+  (Thread/sleep delay))
+
+(defn with-retries*
+  [strategy f]
+  (if-let [[res] (try
+                   [(f)]
+                   (catch Exception e
+                     (when-not (seq strategy)
+                       (throw e))))]
+    res
+    (let [[delay & strategy] strategy]
+      (sleep delay)
+      (recur strategy f))))
+
+(defmacro with-retries
+  "Try executing `body`. If `body` throws an Exception, retry
+  according to the retry `strategy`.
+
+  A retry `strategy` is a seq of delays: `with-retries` will sleep the
+  duration of the delay (in ms) between each retry. The total number
+  of tries is the number of elements in the `strategy` plus one. A
+  simple retry stategy would be: [100 100 100 100] which results in
+  the operation being retried four times (for a total of five tries)
+  with 100ms sleeps in between tries. Note: that infinite strategies
+  are supported, but maybe not encouraged.
+
+  Strategies can be built with the provided builder fns, eg
+  `linear-strategy`, but you can also use a custom seq of delays."
+  [strategy & body]
+  `(with-retries* ~strategy (fn [] ~@body)))
