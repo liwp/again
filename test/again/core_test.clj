@@ -13,13 +13,27 @@
    (let [s (a/max-retries n (repeat 0))]
      (= (count s) n))))
 
+(defspec spec-clamp-delay
+  200
+  (prop/for-all
+   [n gen/s-pos-int
+    max-delay gen/s-pos-int]
+   (let [s (a/max-retries
+            n
+            ;; The increment is picked so that we'll cross max-delay on delay 3
+            (a/clamp-delay max-delay (a/additive-strategy 0 (/ max-delay 2))))]
+     (every? #(<= % max-delay) s))))
+
 (defspec spec-max-delay
   200
   (prop/for-all
    [n gen/s-pos-int
-    m gen/s-pos-int]
-   (let [s (a/max-retries n (a/max-delay m (a/linear-strategy 0 (/ 2 n))))]
-     (every? #(>= m %) s))))
+    max-delay gen/s-pos-int]
+   (let [s (a/max-retries
+            n
+            (a/max-delay max-delay (a/additive-strategy 0 (/ max-delay 10))))]
+     (and (= (count s) (min n 10))
+          (every? #(<= % max-delay) s)))))
 
 (defspec spec-max-duration
   200
@@ -46,19 +60,19 @@
      (and (= (count s) n)
           (= (set s) #{0})))))
 
-(defspec spec-linear-strategy
+(defspec spec-additive-strategy
   200
   (prop/for-all
    [n gen/s-pos-int
     initial-delay gen/pos-int
     increment gen/pos-int]
-   (let [s (a/max-retries n (a/linear-strategy initial-delay increment))
+   (let [s (a/max-retries n (a/additive-strategy initial-delay increment))
          p (fn [[a b]] (= (+ a increment)  b))]
      (and (= (count s) n)
           (= (first s) initial-delay)
           (every? p (partition 2 1 s))))))
 
-(defspec spec-exponential-strategy
+(defspec spec-multiplicative-strategy
   200
   (prop/for-all
    [n gen/s-pos-int
@@ -66,7 +80,7 @@
     delay-multiplier (gen/elements [1.0 1.1 1.3 1.6 2.0 3.0 5.0 9.0 14.0 20.0])]
    (let [s (a/max-retries
             n
-            (a/exponential-strategy initial-delay delay-multiplier))
+            (a/multiplicative-strategy initial-delay delay-multiplier))
          p (fn [[a b]] (= (* a delay-multiplier) b))]
      (and (= (count s) n)
           (= (first s) initial-delay)
@@ -77,9 +91,10 @@
   (prop/for-all
    [rand-factor (gen/elements [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9])
     delay gen/s-pos-int]
-   (let [min-delay (bigint (* delay (- 1 rand-factor)))
+   (let [randomize-delay #'again.core/randomize-delay
+         min-delay (bigint (* delay (- 1 rand-factor)))
          max-delay (bigint (inc (* delay (+ 1 rand-factor))))
-         rand-delay (a/randomize-delay rand-factor delay)]
+         rand-delay (randomize-delay rand-factor delay)]
      (and (<= 0 rand-delay)
           (<= min-delay rand-delay max-delay)))))
 
@@ -144,7 +159,6 @@
   200
   (prop/for-all
    [n gen/s-pos-int]
-   ;; TODO: we should pick a strategy at random since we're not actually sleeping
    (let [strategy (a/max-retries n (a/immediate-strategy))
          [call-count call-count-fn] (set-up-call-count)
          delays (atom [])]

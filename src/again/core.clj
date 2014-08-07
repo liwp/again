@@ -12,20 +12,24 @@
   []
   (constant-strategy 0))
 
-(defn linear-strategy
+(defn additive-strategy
   "Returns a retry strategy where, after the `initial-delay` (ms), the
-  delay increases by `increment` (ms) after each retry."
-  [initial-delay increment]
-  {:pre [(>= initial-delay 0)
-         (>= increment 0)]}
-  (iterate #(+ increment %) (bigint initial-delay)))
+  delay increases by `increment` (ms) after each retry. The single
+  argument version uses the given increment as both the initial delay
+  and the increment."
+  ([increment]
+     (additive-strategy increment increment))
+  ([initial-delay increment]
+     {:pre [(>= initial-delay 0)
+            (>= increment 0)]}
+     (iterate #(+ increment %) (bigint initial-delay))))
 
 (defn stop-strategy
-  "A no-retries policy"
+  "A no-retries policy."
   []
   nil)
 
-(defn exponential-strategy
+(defn multiplicative-strategy
   "Returns a retry strategy with exponentially increasing delays, ie
   each previous delay is multiplied by delay-multiplier to generate
   the next delay."
@@ -34,7 +38,7 @@
          (<= 0 delay-multiplier)]}
   (iterate #(* delay-multiplier %) (bigint initial-delay)))
 
-(defn randomize-delay
+(defn- randomize-delay
   "Returns a random delay from the range [`delay` - `delta`, `delay` + `delta`],
   where `delta` is (`rand-factor` * `delay`). Note: return values are
   rounded to whole numbers, so eg (randomize-delay 0.8 1) can return
@@ -58,15 +62,23 @@
   (map #(randomize-delay rand-factor %) retry-strategy))
 
 (defn max-retries
-  "Limit the number of retries to `n`."
+  "Stop retrying after `n` retries."
   [n retry-strategy]
   {:pre [(>= n 0)]}
   (take n retry-strategy))
 
-(defn max-delay
-  "Clamp the maximum delay for a retry to `delay` (ms)."
+(defn clamp-delay
+  "Replace delays in the strategy that are larger than `delay` with
+  `delay`."
   [delay retry-strategy]
+  {:pre [(>= delay 0)]}
   (map #(min delay %) retry-strategy))
+
+(defn max-delay
+  "Stop retrying once the a delay is larger than `delay`."
+  [delay retry-strategy]
+  {:pre [(>= delay 0)]}
+  (take-while #(< % delay) retry-strategy))
 
 (defn max-duration
   "Limit the maximum wallclock time of the operation to `timeout` (ms)"
@@ -76,7 +88,7 @@
       (cons f
             (lazy-seq (max-duration (- timeout f) r))))))
 
-(defn sleep
+(defn- sleep
   [delay]
   (Thread/sleep (long delay)))
 
@@ -102,9 +114,10 @@
   simple retry stategy would be: [100 100 100 100] which results in
   the operation being retried four times (for a total of five tries)
   with 100ms sleeps in between tries. Note: that infinite strategies
-  are supported, but maybe not encouraged.
+  are supported, but maybe not encouraged...
 
   Strategies can be built with the provided builder fns, eg
-  `linear-strategy`, but you can also use a custom seq of delays."
+  `linear-strategy`, but you can also create any custom seq of
+  delays that suits your use case."
   [strategy & body]
   `(with-retries* ~strategy (fn [] ~@body)))
