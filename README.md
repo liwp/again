@@ -2,8 +2,8 @@
 
 [![Build Status](https://travis-ci.org/listora/again.png?branch=master)](https://travis-ci.org/listora/again)
 
-A Clojure(Script) library for retrying an operation based on a given
-retry strategy.
+A Clojure(Script) library for retrying an operation based on a retry
+strategy.
 
 Clojars: `[listora/again "0.1.0"]`
 
@@ -16,17 +16,6 @@ Clojars: `[listora/again "0.1.0"]`
 
 **TODO**
 
-## Contributing
-
-The project uses [CLJX](https://github.com/lynaghk/cljx) to build
-Clojure and ClojureScript version fo the library from a single code
-base.
-
-Use the `cleantest` Leiningen alias to build and run tests against
-both versions:
-```
-lein cleantest
-```
 
 ## License
 
