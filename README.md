@@ -37,6 +37,10 @@ out, `with-retries` will rethrow the last exception.
   (my-operation arg-1 arg-2))
 ```
 
+The above will retry `my-operation` three times, for a total of four
+tries, with `100ms`, `1000ms` and `10000ms` delays between the
+retries.
+
 The library provides a numbers of functions for generating and
 manipulating retry strategies. Most of the provided strategies are
 inifinite sequences. The strategies can be restricted with the
@@ -45,7 +49,7 @@ manipulator functions.
 ### Generators:
 
 * `constant-strategy` - constant delays between retries
-* `immediate-strategy` - 0ms delays between retries
+* `immediate-strategy` - `0ms` delays between retries
 * `additive-strategy` - incrementally increasing delays between retries
 * `stop-strategy` - no retries
 * `multiplicative-strategy` - exponentially inccreasing delays between retries
@@ -62,8 +66,8 @@ manipulator functions.
 
 The generators and manipulators can be combined to create a desired
 retry strategy. Eg an exponential backoff retry strategy with an
-initial delay of 500ms and a multiplier of 1.5, limited to either 10
-retries or a maximum duration of 10 seconds can be generated as
+initial delay of `500ms` and a multiplier of `1.5`, limited to either
+`10` retries or a maximum duration of `10s` can be generated as
 follows:
 
 ```clj
