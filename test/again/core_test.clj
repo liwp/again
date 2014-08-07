@@ -1,16 +1,10 @@
 (ns again.core-test
-  #+clj (:require [again.core :as a :refer [with-retries]]
-                  [clojure.test :as t :refer [is deftest testing]]
-                  [clojure.test.check :as tc]
-                  [clojure.test.check.clojure-test :refer [defspec]]
-                  [clojure.test.check.generators :as gen]
-                  [clojure.test.check.properties :as prop])
-  #+cljs (:require [again.core :as a]
-                   [cemerick.cljs.test :as t :refer-macros [is deftest testing]]
-                   [clojure.test.check :as tc]
-                   [clojure.test.check.clojure-test :refer-macros [defspec]]
-                   [clojure.test.check.generators :as gen]
-                   [clojure.test.check.properties :as prop :include-macros true]))
+  (:require [again.core :as a :refer [with-retries]]
+            [clojure.test :as t :refer [is deftest testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.clojure-test :refer [defspec]]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]))
 
 (defspec spec-max-retries
   200
