@@ -43,6 +43,10 @@
      (and (= (count s) d)
           (= (reduce + s) d)))))
 
+(deftest test-max-duration
+  (testing "with not enough delays to satisfy specified duration"
+    (is (= (a/max-duration 10000 [0]) [0]))))
+
 (defspec spec-constant-strategy
   200
   (prop/for-all

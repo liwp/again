@@ -83,7 +83,7 @@
 (defn max-duration
   "Limit the maximum wallclock time of the operation to `timeout` (ms)"
   [timeout retry-strategy]
-  (when (pos? timeout)
+  (when (and (pos? timeout) (seq retry-strategy))
     (let [[f & r] retry-strategy]
       (cons f
             (lazy-seq (max-duration (- timeout f) r))))))
