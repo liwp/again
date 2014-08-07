@@ -59,11 +59,50 @@
     initial-delay gen/pos-int
     increment gen/pos-int]
    (let [s (a/max-retries n (a/linear-strategy initial-delay increment))
-         p (fn [[a b]] (= (- b a) increment))]
+         p (fn [[a b]] (= (+ a increment)  b))]
      (and (= (count s) n)
           (= (first s) initial-delay)
           (every? p (partition 2 1 s))))))
 
+(defspec spec-exponential-strategy
+  200
+  (prop/for-all
+   [n gen/s-pos-int
+    initial-delay gen/s-pos-int
+    delay-multiplier (gen/elements [1.0 1.1 1.3 1.6 2.0 3.0 5.0 9.0 14.0 20.0])]
+   (let [s (a/max-retries
+            n
+            (a/exponential-strategy initial-delay delay-multiplier))
+         p (fn [[a b]] (= (* a delay-multiplier) b))]
+     (and (= (count s) n)
+          (= (first s) initial-delay)
+          (every? p (partition 2 1 s))))))
+
+(defspec spec-randomize-delay
+  200
+  (prop/for-all
+   [rand-factor (gen/elements [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9])
+    delay gen/s-pos-int]
+   (let [min-delay (bigint (* delay (- 1 rand-factor)))
+         max-delay (bigint (inc (* delay (+ 1 rand-factor))))
+         rand-delay (a/randomize-delay rand-factor delay)]
+     (and (<= 0 rand-delay)
+          (<= min-delay rand-delay max-delay)))))
+
+(defspec spec-randomize-strategy
+  200
+  (prop/for-all
+   [n gen/s-pos-int
+    rand-factor (gen/elements [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9])]
+   (let [initial-delay 1000
+         s (a/max-retries
+            n
+            (a/randomize-strategy
+             rand-factor
+             (a/constant-strategy initial-delay)))
+         min-delay (bigint (* initial-delay (- 1 rand-factor)))
+         max-delay (bigint (inc (* initial-delay (+ 1 rand-factor))))]
+     (every? #(<= min-delay % max-delay) s))))
 
 (deftest test-stop-strategy
   (is (empty? (a/stop-strategy)) "stop strategy has no delays"))
