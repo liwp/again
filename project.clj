@@ -1,4 +1,4 @@
-(defproject listora/again "0.1.0"
+(defproject listora/again "0.1.1-SNAPSHOT"
   :description "A Clojure library for retrying operations."
   :url "https://github.com/listora/again"
   :license {:name "Eclipse Public License"
