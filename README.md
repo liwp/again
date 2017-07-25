@@ -95,7 +95,7 @@ necessary for the body to execute successfully will be added to the result's
 metadata. This can be retrieved with `get-retry-count`:
 
 ```clj
-(let [result (with-retries [] (inc-count))]
+(let [result (with-retries [] {})]
       (get-retry-count result))
 ;0
 ```
