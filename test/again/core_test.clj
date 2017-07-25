@@ -128,7 +128,7 @@
                         (let [r (swap! call-count inc)]
                           (if (< r i)
                             (throw (Exception. "retry"))
-                            r)))]
+                            {:result r})))]
     [call-count call-count-fn]))
 
 (deftest test-with-retries
@@ -140,19 +140,36 @@
       (is (nil? (with-retries [] nil)) "returns form value"))
 
     (testing "with success on first try"
-      (let [call-count (atom 0)
-            inc-count #(swap! call-count inc)]
+      (let [[call-count inc-count] (set-up-call-count 1)
 
-        (with-retries [] (inc-count))
+            result (with-retries [] (inc-count))]
 
-        (is (= @call-count 1) "executes operation once")))
+        (is (= @call-count 1) "executes operation once")
+        (is (= (a/get-retry-count result) 0) "No retries registered")))
 
     (testing "with success on second try"
-      (let [[call-count call-count-fn] (set-up-call-count 2)]
+      (let [[call-count call-count-fn] (set-up-call-count 2)
 
-        (with-retries [0 0] (call-count-fn))
+            result (with-retries [0 0] (call-count-fn))]
 
-        (is (= @call-count 2) "executes operation twice")))
+        (is (= @call-count 2) "executes operation twice")
+        (is (= (a/get-retry-count result) 1) "One retry registered")))
+
+    (testing "Returning a non-map object"
+      (let [result (with-retries [] 1)
+            result-metadata (meta result)]
+
+        (is (= result-metadata nil)
+            "No metadata should be added when the result cannot accept it")))
+
+    (testing "Returning a map with metadata"
+      (let [result (with-retries
+                     []
+                     (with-meta {:result 12} {:metadata-key "metadata value"}))
+            result-metadata (meta result)]
+
+        (is (= (:metadata-key result-metadata) "metadata value")
+            "Irrelevant metadata should be left unchanged")))
 
     (testing "with permanent failure"
       (let [[_ fail-fn] (set-up-call-count)]

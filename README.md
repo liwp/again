@@ -86,6 +86,17 @@ first retry immediately:
   (cons 0 exponential-backoff-strategy))
 ```
 
+### Retry count
+If the return value of the body is a Clojure map, then the number of *retries*
+necessary for the body to execute successfully will be added to the result's
+metadata. This can be retrieved with `get-retry-count`:
+
+```clj
+(let [result (with-retries [] {})]
+      (get-retry-count result))
+;0
+```
+
 ## License
 
 Copyright © 2014 Listora

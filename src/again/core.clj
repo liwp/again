@@ -92,17 +92,39 @@
   [delay]
   (Thread/sleep (long delay)))
 
+(defn- should-add-metadata?
+  "Determines whether or not awe should add the retry count to the
+  result's Clojure metadata"
+  [obj]
+  (map? obj))
+
+(defn- add-retry-count
+  "Adds a retry count to the Clojure metadata which represents how many
+   retries were necessary for the operation to complete successfully"
+  [obj retry-count]
+  (if (should-add-metadata? obj)
+    (vary-meta obj assoc ::retry-count retry-count)
+    obj))
+
+(defn get-retry-count
+  [obj]
+  "Retrieves the number of retries necessary for the
+  result to be calculated successfully"
+  (-> obj
+      meta
+      ::retry-count))
+
 (defn with-retries*
-  [strategy f]
+  [strategy f retry-count]
   (if-let [[res] (try
                    [(f)]
                    (catch Exception e
                      (when-not (seq strategy)
                        (throw e))))]
-    res
+    (add-retry-count res retry-count)
     (let [[delay & strategy] strategy]
       (sleep delay)
-      (recur strategy f))))
+      (recur strategy f (inc retry-count)))))
 
 (defmacro with-retries
   "Try executing `body`. If `body` throws an Exception, retry
@@ -120,4 +142,4 @@
   `linear-strategy`, but you can also create any custom seq of
   delays that suits your use case."
   [strategy & body]
-  `(with-retries* ~strategy (fn [] ~@body)))
+  `(with-retries* ~strategy (fn [] ~@body) 0))
