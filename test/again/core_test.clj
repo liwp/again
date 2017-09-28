@@ -120,56 +120,161 @@
 (deftest test-stop-strategy
   (is (empty? (a/stop-strategy)) "stop strategy has no delays"))
 
-(defn set-up-call-count
-  [& [i]]
-  (let [i (or i Integer/MAX_VALUE)
-        call-count (atom 0)
-        call-count-fn (fn []
-                        (let [r (swap! call-count inc)]
-                          (if (< r i)
-                            (throw (Exception. "retry"))
-                            r)))]
-    [call-count call-count-fn]))
+(defn new-failing-fn
+  "Returns a map consisting of the following fields:
+   - `f` - a function that will succeed on the `n`th call
+   - `attempts` - an atom counting the number of executions of `f`
+   - `exception` - the exception that `f` throws until it succeeds"
+  [& [n]]
+  (let [n (or n Integer/MAX_VALUE)
+        attempts (atom 0)
+        exception (Exception. "retry")
+        f #(let [i (swap! attempts inc)]
+              (if (< i n)
+                (throw exception)
+                i))]
+    {:attempts attempts :exception exception :f f}))
+
+(defn new-callback-fn
+  "Returns a map consisting of the following fields:
+   - `callback` - a callback function to pass to `with-retries`
+   - `args` - an atom recording the arguments passed to `callback`"
+  []
+  (let [args (atom [])
+        callback #(swap! args conj %)]
+    {:args args :callback callback}))
 
 (deftest test-with-retries
-  (testing "with-retries"
-    (testing "with non-nil return value"
-      (is (= (with-retries [] :return-value) :return-value) "returns form value"))
+  (with-redefs [a/sleep (fn [_])]
+    (testing "with-retries"
+      (testing "with non-nil return value"
+        (is (= (with-retries [] :ok) :ok) "returns form value"))
 
-    (testing "with nil return value"
-      (is (nil? (with-retries [] nil)) "returns form value"))
+      (testing "with nil return value"
+        (is (nil? (with-retries [] nil)) "returns form value"))
 
-    (testing "with success on first try"
-      (let [call-count (atom 0)
-            inc-count #(swap! call-count inc)]
+      (testing "with user-context"
+        (let [context {:a :b}
+              {:keys [args callback]} (new-callback-fn)
+              options {::a/callback callback
+                       ::a/strategy []
+                       ::a/user-context context}
+              res (with-retries options :ok)]
+          (is (= (count @args) 1) "calls callback hook once")
+          (is (= (::a/user-context (first @args)) context)
+              "calls callback hook with user context")))
 
-        (with-retries [] (inc-count))
+      (testing "with success on first try"
+        (let [{:keys [attempts f]} (new-failing-fn 1)
+              {:keys [args callback]} (new-callback-fn)]
+          (with-retries
+            {::a/callback callback
+             ::a/strategy []}
+            (f))
+          (is (= @attempts 1) "executes operation once")
+          (is (= (count @args) 1) "calls callback hook once")
+          (is (= (first @args)
+                 {::a/attempts 1
+                  ::a/slept 0
+                  ::a/status :success})
+              "calls callback hook with success")))
 
-        (is (= @call-count 1) "executes operation once")))
+      (testing "with success on second try"
+        (let [{:keys [attempts exception f]} (new-failing-fn 2)
+              {:keys [args callback]} (new-callback-fn)]
+          (with-retries
+            {::a/callback callback
+             ::a/strategy [12]}
+            (f))
+          (is (= @attempts 2) "executes operation twice")
+          (is (= (count @args) 2) "calls callback hook twice")
+          (is (= (first @args)
+                 {::a/attempts 1
+                  ::a/exception exception
+                  ::a/slept 0
+                  ::a/status :retry})
+              "calls callback hook with failure")
+          (is (= (second @args)
+                 {::a/attempts 2
+                  ::a/slept 12
+                  ::a/status :success})
+              "calls callback hook with success")))
 
-    (testing "with success on second try"
-      (let [[call-count call-count-fn] (set-up-call-count 2)]
+      (testing "with permanent failure"
+        (let [{:keys [exception f]} (new-failing-fn)
+              {:keys [args callback]} (new-callback-fn)]
+          (is (thrown?
+               Exception
+               (with-retries
+                 {::a/callback callback
+                  ::a/strategy [123]}
+                 (f)))
+              "throws exception")
 
-        (with-retries [0 0] (call-count-fn))
+          (is (= (count @args) 2) "calls callback hook twice")
+          (is (= (first @args)
+                 {::a/attempts 1
+                  ::a/exception exception
+                  ::a/slept 0
+                  ::a/status :retry})
+              "calls callback hook with failure")
+          (is (= (second @args)
+                 {::a/attempts 2
+                  ::a/exception exception
+                  ::a/slept 123
+                  ::a/status :failure})
+              "calls callback hook with permanent failure"))))))
 
-        (is (= @call-count 2) "executes operation twice")))
+(defmulti log-attempt ::a/status)
+(defmethod log-attempt :retry [s]
+  (swap! (::a/user-context s) assoc :retried? true)
+  (println "RETRY" s))
+(defmethod log-attempt :success [s]
+  (if (-> s ::a/user-context deref :retried?)
+    (println "SUCCESS after" (::a/attempts s) "attempts" s)
+    (println "SUCCESS on first attempt" s)))
+(defmethod log-attempt :failure [s] (println "FAILURE" s))
+(defmethod log-attempt :default [s] (assert false))
 
-    (testing "with permanent failure"
-      (let [[_ fail-fn] (set-up-call-count)]
-        (is (thrown? Exception (with-retries [] (fail-fn)))
-            "throws exception")))))
+(deftest test-multimethod-callback
+  (with-redefs [a/sleep (fn [_])]
+    (testing "multi-method-callback"
+      (testing "with failure"
+        (let [{:keys [attempts exception f]} (new-failing-fn)]
+          (try
+            (with-retries
+              {::a/callback log-attempt
+               ::a/strategy [1]
+               ::a/user-context (atom {})}
+              (f))
+            (catch Exception e
+              (when (not= e exception)
+                (println "Unexpected exception:" e)
+                (.printStackTrace e))))))
+
+      (testing "with success"
+        (let [{:keys [attempts exception f]} (new-failing-fn 2)]
+          (try
+            (with-retries
+              {::a/callback log-attempt
+               ::a/strategy [1]
+               ::a/user-context (atom {})}
+              (f))
+            (catch Exception e
+              (when (not= e exception)
+                (println "Unexpected exception:" e)
+                (.printStackTrace e)))))))))
 
 (defspec spec-with-retries
   200
   (prop/for-all
-   [n gen/s-pos-int]
-   (let [strategy (a/max-retries n (a/immediate-strategy))
-         [call-count call-count-fn] (set-up-call-count)
+   [strategy (gen/vector gen/s-pos-int)]
+   (let [{:keys [attempts f]} (new-failing-fn)
          delays (atom [])]
-     (with-redefs [a/sleep (fn [d] (swap! delays conj d))]
+     (with-redefs [a/sleep #(swap! delays conj %)]
        (try
-         (with-retries strategy (call-count-fn))
+         (with-retries strategy (f))
          (catch Exception _)))
 
-     (and (= @call-count (inc n))
+     (and (= @attempts (inc (count strategy)))
           (= @delays strategy)))))
