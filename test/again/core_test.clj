@@ -1,5 +1,5 @@
 (ns again.core-test
-  (:require [again.core :as a :refer [with-retries]]
+  (:require [again.core :as a :refer [with-retries with-conditional-retries]]
             [clojure.test :as t :refer [is deftest testing]]
             [clojure.test.check :as tc]
             [clojure.test.check.clojure-test :refer [defspec]]
@@ -153,6 +153,28 @@
         (with-retries [0 0] (call-count-fn))
 
         (is (= @call-count 2) "executes operation twice")))
+
+    (testing "with exception retry predicate"
+      (let [call-count (atom 0)
+            retry-exception? (comp :retry? ex-data)
+
+            test-conditional-retries
+            (fn [expected-call-count strategy retry?]
+              (try
+                (reset! call-count 0)
+                (with-conditional-retries strategy retry-exception?
+                  (do
+                    (swap! call-count inc)
+                    (throw (ex-info "failure" {:retry? retry?}))))
+                (catch Exception e
+                  (is (= "failure" (.getMessage e)))
+                  (is (= expected-call-count @call-count)
+                      (str "when retry is " retry?
+                           " and strategy is " (pr-str strategy)
+                           " should have tried " expected-call-count
+                           " time(s)")))))]
+        (test-conditional-retries 1 [0 0 0] false)
+        (test-conditional-retries 4 [0 0 0] true)))
 
     (testing "with permanent failure"
       (let [[_ fail-fn] (set-up-call-count)]

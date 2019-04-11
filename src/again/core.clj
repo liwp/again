@@ -93,16 +93,18 @@
   (Thread/sleep (long delay)))
 
 (defn with-retries*
-  [strategy f]
-  (if-let [[res] (try
-                   [(f)]
-                   (catch Exception e
-                     (when-not (seq strategy)
-                       (throw e))))]
-    res
-    (let [[delay & strategy] strategy]
-      (sleep delay)
-      (recur strategy f))))
+  ([strategy f]
+   (with-retries* strategy (constantly true) f))
+  ([strategy retry-exception? f]
+   (if-let [[res] (try
+                    [(f)]
+                    (catch Exception e
+                      (when-not (and (seq strategy) (retry-exception? e))
+                        (throw e))))]
+     res
+     (let [[delay & strategy] strategy]
+       (sleep delay)
+       (recur strategy retry-exception? f)))))
 
 (defmacro with-retries
   "Try executing `body`. If `body` throws an Exception, retry
@@ -121,3 +123,9 @@
   delays that suits your use case."
   [strategy & body]
   `(with-retries* ~strategy (fn [] ~@body)))
+
+(defmacro with-conditional-retries
+  "Just like `with-retries` but you can pass a predicate `retry-exception?` to
+  tell us whether a specific exception should be retried."
+  [strategy retry-exception? & body]
+  `(with-retries* ~strategy ~retry-exception? (fn [] ~@body)))
