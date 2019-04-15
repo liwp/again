@@ -1,7 +1,6 @@
 (ns again.core-test
   (:require [again.core :as a :refer [with-retries]]
-            [clojure.test :as t :refer [is deftest testing]]
-            [clojure.test.check :as tc]
+            [clojure.test :refer [is deftest testing]]
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]))
@@ -71,7 +70,7 @@
     initial-delay gen/pos-int
     increment gen/pos-int]
    (let [s (a/max-retries n (a/additive-strategy initial-delay increment))
-         p (fn [[a b]] (= (+ a increment)  b))]
+         p (fn [[a b]] (= (+ a increment) b))]
      (and (= (count s) n)
           (= (first s) initial-delay)
           (every? p (partition 2 1 s))))))
@@ -130,9 +129,9 @@
         attempts (atom 0)
         exception (Exception. "retry")
         f #(let [i (swap! attempts inc)]
-              (if (< i n)
-                (throw exception)
-                i))]
+             (if (< i n)
+               (throw exception)
+               i))]
     {:attempts attempts :exception exception :f f}))
 
 (defn new-callback-fn
@@ -144,86 +143,92 @@
         callback #(swap! args conj %)]
     {:args args :callback callback}))
 
-(deftest test-with-retries
-  (with-redefs [a/sleep (fn [_])]
-    (testing "with-retries"
-      (testing "with non-nil return value"
-        (is (= (with-retries [] :ok) :ok) "returns form value"))
+(defmacro defsleeplesstest
+  "Defines a test that removes any sleep delays"
+  [n & body]
+  `(deftest ~n
+     (with-redefs [a/sleep (constantly nil)]
+       ~@body)))
 
-      (testing "with nil return value"
-        (is (nil? (with-retries [] nil)) "returns form value"))
+(defsleeplesstest test-with-retries
+  (testing "with-retries"
+    (testing "with non-nil return value"
+      (is (= (with-retries [] :ok) :ok) "returns form value"))
 
-      (testing "with user-context"
-        (let [context {:a :b}
-              {:keys [args callback]} (new-callback-fn)
-              options {::a/callback callback
-                       ::a/strategy []
-                       ::a/user-context context}
-              res (with-retries options :ok)]
-          (is (= (count @args) 1) "calls callback hook once")
-          (is (= (::a/user-context (first @args)) context)
-              "calls callback hook with user context")))
+    (testing "with nil return value"
+      (is (nil? (with-retries [] nil)) "returns form value"))
 
-      (testing "with success on first try"
-        (let [{:keys [attempts f]} (new-failing-fn 1)
-              {:keys [args callback]} (new-callback-fn)]
-          (with-retries
-            {::a/callback callback
-             ::a/strategy []}
-            (f))
-          (is (= @attempts 1) "executes operation once")
-          (is (= (count @args) 1) "calls callback hook once")
-          (is (= (first @args)
-                 {::a/attempts 1
-                  ::a/slept 0
-                  ::a/status :success})
-              "calls callback hook with success")))
+    (testing "with user-context"
+      (let [context {:a :b}
+            {:keys [args callback]} (new-callback-fn)
+            options {::a/callback callback
+                     ::a/strategy []
+                     ::a/user-context context}
+            _ (with-retries options :ok)]
+        (is (= (count @args) 1) "calls callback hook once")
+        (is (= (::a/user-context (first @args)) context)
+            "calls callback hook with user context")))
 
-      (testing "with success on second try"
-        (let [{:keys [attempts exception f]} (new-failing-fn 2)
-              {:keys [args callback]} (new-callback-fn)]
-          (with-retries
-            {::a/callback callback
-             ::a/strategy [12]}
-            (f))
-          (is (= @attempts 2) "executes operation twice")
-          (is (= (count @args) 2) "calls callback hook twice")
-          (is (= (first @args)
-                 {::a/attempts 1
-                  ::a/exception exception
-                  ::a/slept 0
-                  ::a/status :retry})
-              "calls callback hook with failure")
-          (is (= (second @args)
-                 {::a/attempts 2
-                  ::a/slept 12
-                  ::a/status :success})
-              "calls callback hook with success")))
+    (testing "with success on first try"
+      (let [{:keys [attempts f]} (new-failing-fn 1)
+            {:keys [args callback]} (new-callback-fn)]
+        (with-retries
+         {::a/callback callback
+          ::a/strategy []}
+         (f))
+        (is (= @attempts 1) "executes operation once")
+        (is (= (count @args) 1) "calls callback hook once")
+        (is (= (first @args)
+               {::a/attempts 1
+                ::a/slept 0
+                ::a/status :success})
+            "calls callback hook with success")))
 
-      (testing "with permanent failure"
-        (let [{:keys [exception f]} (new-failing-fn)
-              {:keys [args callback]} (new-callback-fn)]
-          (is (thrown?
-               Exception
-               (with-retries
-                 {::a/callback callback
-                  ::a/strategy [123]}
-                 (f)))
-              "throws exception")
+    (testing "with success on second try"
+      (let [{:keys [attempts exception f]} (new-failing-fn 2)
+            {:keys [args callback]} (new-callback-fn)]
+        (with-retries
+         {::a/callback callback
+          ::a/strategy [12]}
+         (f))
+        (is (= @attempts 2) "executes operation twice")
+        (is (= (count @args) 2) "calls callback hook twice")
+        (is (= (first @args)
+               {::a/attempts 1
+                ::a/exception exception
+                ::a/slept 0
+                ::a/status :retry})
+            "calls callback hook with failure")
+        (is (= (second @args)
+               {::a/attempts 2
+                ::a/slept 12
+                ::a/status :success})
+            "calls callback hook with success")))
 
-          (is (= (count @args) 2) "calls callback hook twice")
-          (is (= (first @args)
-                 {::a/attempts 1
-                  ::a/exception exception
-                  ::a/slept 0
-                  ::a/status :retry})
-              "calls callback hook with failure")
-          (is (= (second @args)
-                 {::a/attempts 2
-                  ::a/exception exception
-                  ::a/slept 123
-                  ::a/status :failure})
-              "calls callback hook with permanent failure"))))))
+    (testing "with permanent failure"
+      (let [{:keys [exception f]} (new-failing-fn)
+            {:keys [args callback]} (new-callback-fn)]
+        (is (thrown?
+             Exception
+             (with-retries
+              {::a/callback callback
+               ::a/strategy [123]}
+              (f)))
+            "throws exception")
+
+        (is (= (count @args) 2) "calls callback hook twice")
+        (is (= (first @args)
+               {::a/attempts 1
+                ::a/exception exception
+                ::a/slept 0
+                ::a/status :retry})
+            "calls callback hook with failure")
+        (is (= (second @args)
+               {::a/attempts 2
+                ::a/exception exception
+                ::a/slept 123
+                ::a/status :failure})
+            "calls callback hook with permanent failure")))))
 
 (defmulti log-attempt ::a/status)
 (defmethod log-attempt :retry [s]
@@ -236,34 +241,58 @@
 (defmethod log-attempt :failure [s] (println "FAILURE" s))
 (defmethod log-attempt :default [s] (assert false))
 
-(deftest test-multimethod-callback
-  (with-redefs [a/sleep (fn [_])]
-    (testing "multi-method-callback"
-      (testing "with failure"
-        (let [{:keys [attempts exception f]} (new-failing-fn)]
-          (try
-            (with-retries
-              {::a/callback log-attempt
-               ::a/strategy [1]
-               ::a/user-context (atom {})}
-              (f))
-            (catch Exception e
-              (when (not= e exception)
-                (println "Unexpected exception:" e)
-                (.printStackTrace e))))))
+(defsleeplesstest test-multimethod-callback
+  (testing "multi-method-callback"
+    (testing "with failure"
+      (let [{:keys [exception f]} (new-failing-fn)]
+        (try
+          (with-retries
+           {::a/callback log-attempt
+            ::a/strategy [1]
+            ::a/user-context (atom {})}
+           (f))
+          (catch Exception e
+            (when (not= e exception)
+              (println "Unexpected exception:" e)
+              (.printStackTrace e))))))
 
-      (testing "with success"
-        (let [{:keys [attempts exception f]} (new-failing-fn 2)]
+    (testing "with success"
+      (let [{:keys [exception f]} (new-failing-fn 2)]
+        (try
+          (with-retries
+           {::a/callback log-attempt
+            ::a/strategy [1]
+            ::a/user-context (atom {})}
+           (f))
+          (catch Exception e
+            (when (not= e exception)
+              (println "Unexpected exception:" e)
+              (.printStackTrace e))))))))
+
+(defsleeplesstest test-exception-filter
+  (let [call-count (atom 0)
+        retry-exception? (comp :retry? ex-data)
+
+        test-conditional-retries
+        (fn [expected-call-count strategy retry?]
           (try
-            (with-retries
-              {::a/callback log-attempt
-               ::a/strategy [1]
-               ::a/user-context (atom {})}
-              (f))
+            (reset! call-count 0)
+            (with-retries {::a/strategy strategy
+                           ::a/exception-predicate retry-exception?}
+                          (do
+                            (swap! call-count inc)
+                            (throw (ex-info "failure" {:retry? retry?}))))
             (catch Exception e
-              (when (not= e exception)
-                (println "Unexpected exception:" e)
-                (.printStackTrace e)))))))))
+              (is (= "failure" (.getMessage e)))
+              (is (= expected-call-count @call-count)
+                  (str "when retry is " retry?
+                       " and strategy is " (pr-str strategy)
+                       " should have tried " expected-call-count
+                       " time(s)")))))]
+    (test-conditional-retries 1 [1 2 3] false)
+    (test-conditional-retries 1 [1 2 3 4] false)
+    (test-conditional-retries 4 [1 2 3] true)
+    (test-conditional-retries 5 [1 2 3 4] true)))
 
 (defspec spec-with-retries
   200
