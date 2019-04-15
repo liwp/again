@@ -96,7 +96,8 @@
   define a default callback function."
   [strategy-or-options]
   (let [noop (fn [& _])
-        default-options {::callback noop}
+        default-options {::callback noop
+                         ::exception-predicate (constantly true)}
         options (if (map? strategy-or-options)
                   strategy-or-options
                   {::strategy strategy-or-options})]
@@ -104,9 +105,12 @@
 
 (defn with-retries*
   [strategy-or-options f]
-  (let [options (build-options strategy-or-options)
-        callback (::callback options)
-        delays (::strategy options)
+  (let [{callback ::callback
+         delays ::strategy
+         should-retry? ::exception-predicate
+         :as options}
+        (build-options strategy-or-options)
+
         callback-state (merge
                         {::attempts 1 ::slept 0}
                         (select-keys options [::user-context]))]
@@ -119,6 +123,8 @@
                              callback)
                          res)
                        (catch Exception e
+                         (when-not (should-retry? e) (throw e))
+
                          (-> callback-state
                              (assoc
                               ::exception e
@@ -153,6 +159,7 @@
 
   {:again.core/callback <fn>
    :again.core/user-context <anything, but probably an atom>
+   :again.core/exception-predicate <fn>
    :again.core/strategy <delay strategy>}
 
   `:again.core/callback` is a callback function that is called after each
@@ -167,6 +174,10 @@
    :again.core/exception <the exception thrown by body>
    :again.core/slept <the sum of all delays thus far>
    :again.core/status <the result of the last attempt: :success, :failure, or :retry
-   :again.core/user-context <the user context from the options map>}"
+   :again.core/user-context <the user context from the options map>}
+
+   The exception-predicate is a function that is called with an exception. It
+   can return truthy or falsey. If truthy, the exception is retried. This
+   function defaults to `(constantly true)`"
   [strategy-or-options & body]
   `(with-retries* ~strategy-or-options (fn [] ~@body)))
