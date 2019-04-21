@@ -1,9 +1,4 @@
 language: clojure
-lein: lein
-
-jdk:
-  - openjdk7
-  - oraclejdk7
 
 notifications:
   email: false
