@@ -7,7 +7,7 @@ A Clojure library for retrying an operation based on a retry strategy.
 ## Clojars
 
 ```clj
-[listora/again "1.0.0-SNAPSHOT"]
+[listora/again "1.0.0"]
 ```
 
 ---
