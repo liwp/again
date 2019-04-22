@@ -95,9 +95,7 @@
   "Turn a strategy-sequence to an options-map (if it's not a map already), and
   define a default callback function."
   [strategy-or-options]
-  (let [noop (fn [& _])
-        default-options {::callback noop
-                         ::exception-predicate (constantly true)}
+  (let [default-options {::callback (constantly nil)}
         options (if (map? strategy-or-options)
                   strategy-or-options
                   {::strategy strategy-or-options})]
@@ -107,7 +105,6 @@
   [strategy-or-options f]
   (let [{callback ::callback
          delays ::strategy
-         should-retry? ::exception-predicate
          :as options}
         (build-options strategy-or-options)
 
@@ -123,16 +120,15 @@
                              callback)
                          res)
                        (catch Exception e
-                         (when-not (should-retry? e) (throw e))
-
-                         (-> callback-state
-                             (assoc
-                              ::exception e
-                              ::status (if delay :retry :failure))
-                             callback)
-                         (if delay
-                           (sleep delay)
-                           (throw e))
+                         (let [retry? (-> callback-state
+                                         (assoc
+                                          ::exception e
+                                          ::status (if delay :retry :failure))
+                                         callback
+                                         (not= ::fail))]
+                           (if (and delay retry?)
+                             (sleep delay)
+                             (throw e)))
                          nil))]
         res
         (recur delays (-> callback-state
@@ -148,24 +144,26 @@
   number of elements in the `strategy` plus one. A simple retry stategy would
   be: [100 100 100 100] which results in the operation being retried four times,
   for a total of five attempts, with 100ms sleeps in between attempts. Note:
-  that infinite strategies are supported, but maybe not encouraged…
+  infinite strategies are supported, but maybe not encouraged…
 
   Strategies can be built with the provided builder fns, eg `linear-strategy`,
   and modified with the provided manipulator fns, eg `clamp-delay`, but you can
   also create any custom seq of delays that suits your use case.
 
   Instead of a simple delay sequence, you can also pass in the following type of
-  options map:
+  options map as the first argument to `with-retries`:
 
   {:again.core/callback <fn>
-   :again.core/user-context <anything, but probably an atom>
-   :again.core/exception-predicate <fn>
-   :again.core/strategy <delay strategy>}
+   :again.core/strategy <delay strategy>
+   :again.core/user-context <anything, but probably an atom>}
 
   `:again.core/callback` is a callback function that is called after each
-  attempt. `:again.core/user-context` is an opaque value that is passed to the
-  callback function as an argument. And `:again.core/strategy` is the sequence
-  of delays.
+  attempt.
+
+  `:again.core/strategy` is the sequence of delays (ie retry strategy).
+
+  `:again.core/user-context` is an opaque value that is passed to the callback
+  function as an argument.
 
   The callback function is called with the following type of map as its only
   argument:
@@ -176,8 +174,8 @@
    :again.core/status <the result of the last attempt: :success, :failure, or :retry
    :again.core/user-context <the user context from the options map>}
 
-   The exception-predicate is a function that is called with an exception. It
-   can return truthy or falsey. If truthy, the exception is retried. This
-   function defaults to `(constantly true)`"
+  The callback function can return `:again.core/fail` to instruct `with-retries`
+  to ignore the rest of the retry strategy and rethrow the previous
+  exception (ie return early)."
   [strategy-or-options & body]
   `(with-retries* ~strategy-or-options (fn [] ~@body)))

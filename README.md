@@ -7,7 +7,7 @@ A Clojure library for retrying an operation based on a retry strategy.
 ## Clojars
 
 ```clj
-[listora/again "0.2.0-SNAPSHOT"]
+[listora/again "1.0.0-SNAPSHOT"]
 ```
 
 ---
@@ -71,6 +71,9 @@ functions.
 
 ### Advanced use case:
 
+The advanced form allows you to pass in other options than just the retry
+strategy.
+
 ```clj
 (require '[again.core :as again])
 
@@ -87,20 +90,20 @@ functions.
 
 (again/with-retries
   {::again/callback log-attempt
-   ::again/user-context (atom {})
-   ::again/strategy [100 1000 10000]}
+   ::again/strategy [100 1000 10000]
+   ::again/user-context (atom {})}
   (my-operation …))
 ```
 
 The above example is contrived (there's no need to set `:retried?` in the user
 context since the `:success` callback could just check if `::again/attempts` is
-greater than 1), but it tries to show that:
+greater than `1`), but it tries to show that:
 
 - instead of a sequence of delays, `with-retries` also accepts a map as its
   first argument
 - the `:again.core/strategy` key is used to pass in the delay strategy
 - the `:again.core/callback` key can be used to specify a function that will get
-  called after each form execution attempt
+  called after each attempt
 - the `:again.core/user-context` key can be used to specify a user-defined
   context object that will get passed to the callback function
 
@@ -108,24 +111,37 @@ The callback function and the context object allows (hopefully!) for arbitrary
 monitoring implementations where the results of each attempt can be eg logged to
 a monitoring system.
 
-The callback is passed a map as its one argument:
+The callback is called with a map as its only argument:
 
 ```clj
 {
   ;; the number of form executions - a positive integer
-  ::again/attempts …
+  :again.core/attempts …
   ;; the exception that was thrown when the execution failed (not present
   ;; in the `:success` case)
-  ::again/exception …
-  ;; the sum of all delays thus far
-  ::again/slept …
+  :again.core/exception …
+  ;; the sum of all delays thus far (in milliseconds)
+  :again.core/slept …
   ;; the result of the previous execution - `:success`, `:failure`, or
   ;; `:retry`
-  ::again/status …
-  ;; the `::again/user-context` value from the map passed to `with-retries`
-  ::again/user-context …
+  :again.core/status …
+  ;; the `:again.core/user-context` value from the map passed to `with-retries`
+  :again.core/user-context …
 }
 ```
+
+The callback can also return the `:again.core/fail` keyword to ignore the rest
+of the retry strategy and throw the current exception from `with-retries` (That
+is, it provides a mechanism for early termination). For example, the callback
+could check the exception's `ex-data` and decide to fail the operation:
+
+```clj
+(again/with-retries
+  {::again/callback #(when (-> % ::again/exception ex-data :fail?) ::again/fail)
+   ::again/strategy [100 1000 10000]}
+  (my-operation …))
+```
+
 
 ### Generators:
 
