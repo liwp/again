@@ -286,6 +286,70 @@
 
 (defmethod log-attempt :default [s] (assert false))
 
+(deftest test-preconditions
+  (testing "constant-strategy rejects negative delay"
+    (is (thrown? AssertionError (a/constant-strategy -1))))
+  (testing "additive-strategy rejects negative initial-delay"
+    (is (thrown? AssertionError (a/additive-strategy -1 100))))
+  (testing "additive-strategy rejects negative increment"
+    (is (thrown? AssertionError (a/additive-strategy 100 -1))))
+  (testing "multiplicative-strategy rejects negative initial-delay"
+    (is (thrown? AssertionError (a/multiplicative-strategy -1 2.0))))
+  (testing "multiplicative-strategy rejects negative multiplier"
+    (is (thrown? AssertionError (a/multiplicative-strategy 100 -1.0))))
+  (testing "max-retries rejects negative n"
+    (is (thrown? AssertionError (a/max-retries -1 (a/constant-strategy 0)))))
+  (testing "clamp-delay rejects negative delay"
+    (is (thrown? AssertionError (a/clamp-delay -1 (a/constant-strategy 0)))))
+  (testing "max-delay rejects negative delay"
+    (is (thrown? AssertionError (a/max-delay -1 (a/constant-strategy 0)))))
+  (let [s (a/max-retries 1 (a/constant-strategy 100))]
+    (testing "randomize-strategy rejects rand-factor of 0"
+      (is (thrown? AssertionError (a/randomize-strategy 0 s))))
+    (testing "randomize-strategy rejects rand-factor of 1"
+      (is (thrown? AssertionError (a/randomize-strategy 1 s))))
+    (testing "randomize-strategy rejects rand-factor greater than 1"
+      (is (thrown? AssertionError (a/randomize-strategy 1.5 s))))))
+
+(deftest test-zero-and-boundary-values
+  (testing "max-retries 0 returns empty strategy"
+    (is (empty? (a/max-retries 0 (a/constant-strategy 100)))))
+  (testing "max-delay 0 returns empty strategy"
+    (is (empty? (a/max-delay 0 (a/additive-strategy 0 1)))))
+  (testing "max-duration with zero timeout returns nil"
+    (is (nil? (a/max-duration 0 (a/constant-strategy 1)))))
+  (testing "max-duration with empty strategy returns nil"
+    (is (nil? (a/max-duration 1000 []))))
+  (testing "multiplicative-strategy with initial-delay 0 produces all-zero delays"
+    (is (every? zero? (take 5 (a/multiplicative-strategy 0 2.0)))))
+  (testing "multiplicative-strategy with multiplier 1 produces constant delays"
+    (is (every? #(== % 100) (take 5 (a/multiplicative-strategy 100 1.0))))))
+
+(deftest test-exception-identity
+  (with-redefs [a/sleep (constantly nil)]
+    (testing "rethrows the exact same exception object"
+      (let [{:keys [exception f]} (new-failing-fn)]
+        (is (identical? exception
+                        (try
+                          (with-retries [100] (f))
+                          (catch Exception e e))))))))
+
+(deftest test-stop-strategy-no-retries
+  (with-redefs [a/sleep (constantly nil)]
+    (let [{:keys [attempts exception f]} (new-failing-fn)]
+      (is (identical? exception
+                      (try (with-retries (a/stop-strategy) (f))
+                           (catch Exception e e))))
+      (is (= @attempts 1) "operation attempted exactly once with stop-strategy"))))
+
+(deftest test-readme-basic-example
+  (let [{:keys [attempts f]} (new-failing-fn 4)
+        slept (atom [])]
+    (with-redefs [a/sleep #(swap! slept conj %)]
+      (with-retries [100 1000 10000] (f))
+      (is (= @attempts 4) "operation attempted four times")
+      (is (= @slept [100 1000 10000]) "sleeps match strategy delays"))))
+
 (deftest test-multimethod-callback
   (with-redefs [a/sleep (constantly nil)]
     (testing "multi-method-callback"
