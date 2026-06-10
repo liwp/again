@@ -1,7 +1,5 @@
 # Again
 
-[![Build Status](https://travis-ci.org/liwp/again.png?branch=master)](https://travis-ci.org/liwp/again)
-
 A Clojure library for retrying an operation based on a retry strategy.
 
 ## Clojars
@@ -9,6 +7,22 @@ A Clojure library for retrying an operation based on a retry strategy.
 ```clj
 [listora/again "1.0.0"]
 ```
+
+With `deps.edn`:
+
+```clj
+listora/again {:mvn/version "1.0.0"}
+```
+
+## Development
+
+Run the test suite with the Clojure CLI:
+
+```sh
+clojure -M:test
+```
+
+Release coordinate: `listora/again`. Releases are published to Clojars.
 
 ---
 
