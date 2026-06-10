@@ -1,5 +1,21 @@
 # Agent Instructions
 
+## Project Overview
+
+Again is a small Clojure library for retrying operations according to composable
+retry strategies. The public API lives in `src/again/core.clj`; tests live in
+`test/again/core_test.clj`. The library exposes delay strategy builders and
+manipulators, plus `with-retries` for wrapping an existing form with retry
+behavior.
+
+## Build & Test
+
+The project uses `deps.edn` and the Clojure CLI.
+
+```bash
+clojure -M:test
+```
+
 This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
 
 > **Architecture in one line:** Issues live in a local Dolt database

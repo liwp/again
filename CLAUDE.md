@@ -60,18 +60,30 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
+This project uses `deps.edn` and the Clojure CLI.
 
 ```bash
-# Example:
-# npm install
-# npm test
+clojure -M:test
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+Again is a small Clojure library for retrying operations according to composable
+retry strategies. The public API lives in `src/again/core.clj`; tests live in
+`test/again/core_test.clj`.
+
+The core namespace provides:
+
+- strategy builders such as `constant-strategy`, `additive-strategy`,
+  `multiplicative-strategy`, and `immediate-strategy`
+- strategy manipulators such as `max-retries`, `max-delay`, `max-duration`,
+  `clamp-delay`, and `randomize-strategy`
+- `with-retries`, a macro for wrapping an existing form and retrying it when it
+  throws
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- Keep the public API small and compatible where practical.
+- Prefer deterministic tests; use `with-redefs` for sleep or time-sensitive
+  behavior.
+- Use Beads (`bd`) for task tracking rather than markdown TODO lists.

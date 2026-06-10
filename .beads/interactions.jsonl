@@ -1,0 +1,1 @@
+{"id":"int-60b71802cae7243e3c6b184066ec1153","kind":"field_change","created_at":"2026-06-10T16:47:33.15455Z","actor":"Lauri Pesonen","issue_id":"ag-5km","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Updated AGENTS.md and CLAUDE.md with project overview and clojure -M:test command."}}
