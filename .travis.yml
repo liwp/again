@@ -1,4 +1,0 @@
-language: clojure
-
-notifications:
-  email: false
