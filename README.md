@@ -169,8 +169,9 @@ could check the exception's `ex-data` and decide to fail the operation:
 
 * `clamp-delay` - limit the delay to a given number
 * `max-delay` - truncate the sequence once the delay between two attempts exceeds the given number
-* `max-duration` - truncate the sequence once the sum of all past delays exceeds the given number
+* `max-duration` - truncate the sequence once the sum of all past delays exceeds the given number (delay budget only; does not account for execution time)
 * `max-retries` - truncate the sequence after the given number of retries
+* `max-wall-clock-duration` - truncate the sequence once wall-clock elapsed time since the first attempt exceeds the given number (includes execution time, unlike `max-duration`)
 * `randomize-strategy` - scale each delay with a new random number
 
 ### Exponential backoff example:

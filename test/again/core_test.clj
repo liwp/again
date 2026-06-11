@@ -303,6 +303,11 @@
     (is (thrown? AssertionError (a/clamp-delay -1 (a/constant-strategy 0)))))
   (testing "max-delay rejects negative delay"
     (is (thrown? AssertionError (a/max-delay -1 (a/constant-strategy 0)))))
+  (testing "max-wall-clock-duration rejects negative timeout"
+    (is (thrown? AssertionError (a/max-wall-clock-duration -1 (a/constant-strategy 100)))))
+  (testing "max-wall-clock-duration rejects nested max-wall-clock-duration"
+    (is (thrown? AssertionError
+          (a/max-wall-clock-duration 5000 (a/max-wall-clock-duration 3000 (a/constant-strategy 100))))))
   (let [s (a/max-retries 1 (a/constant-strategy 100))]
     (testing "randomize-strategy rejects rand-factor of 0"
       (is (thrown? AssertionError (a/randomize-strategy 0 s))))
@@ -395,4 +400,76 @@
           (is (= (first @user-context) :retry) "first call is a retry")
           (is (= (second @user-context) :fail) "second call is a fail"))))))
 
+(deftest test-max-wall-clock-duration-runtime
+  (with-redefs [a/sleep (constantly nil)]
+    (testing "deadline exceeded after first failure stops retrying"
+      (let [calls    (atom 0)
+            {:keys [f attempts]} (new-failing-fn)]
+        (with-redefs [a/current-time-ms #(case (swap! calls inc) 1 0 11000)]
+          (is (thrown? Exception
+                (with-retries (a/max-wall-clock-duration 10000 [100 100 100]) (f)))))
+        (is (= @attempts 1) "only 1 attempt before wall-clock timeout fires")))
 
+    (testing "timeout not yet reached — all retries in strategy proceed"
+      (let [{:keys [f attempts]} (new-failing-fn)]
+        (with-redefs [a/current-time-ms (constantly 0)]
+          (try
+            (with-retries (a/max-wall-clock-duration 10000 [100 100 100]) (f))
+            (catch Exception _)))
+        (is (= @attempts 4) "all 3 retries fire; 4 total attempts before strategy exhaustion")))
+
+    (testing "zero timeout stops after first failure"
+      (let [{:keys [f attempts]} (new-failing-fn)]
+        (with-redefs [a/current-time-ms (constantly 0)]
+          (is (thrown? Exception
+                (with-retries (a/max-wall-clock-duration 0 [100 100 100]) (f)))))
+        (is (= @attempts 1) "only 1 attempt with zero timeout")))
+
+    (testing "success path is unaffected"
+      (let [{:keys [f]} (new-failing-fn 1)]
+        (with-redefs [a/current-time-ms (constantly 0)]
+          (is (= 1 (with-retries (a/max-wall-clock-duration 10000 [100]) (f)))
+              "returns result when operation succeeds"))))
+
+    (testing "strategy exhausted before timeout still throws"
+      (let [{:keys [f attempts]} (new-failing-fn)]
+        (with-redefs [a/current-time-ms (constantly 0)]
+          (is (thrown? Exception
+                (with-retries (a/max-wall-clock-duration 10000 [100]) (f)))))
+        (is (= @attempts 2) "1 initial + 1 retry before strategy runs out")))
+
+    (testing "callback receives :failure status when wall-clock timeout fires"
+      (let [calls    (atom 0)
+            {:keys [f]} (new-failing-fn)
+            {:keys [args callback]} (new-callback-fn)]
+        (with-redefs [a/current-time-ms #(case (swap! calls inc) 1 0 11000)]
+          (is (thrown? Exception
+                (with-retries (merge (a/max-wall-clock-duration 10000 [100 100])
+                                     {::a/callback callback})
+                              (f)))))
+        (is (= :failure (::a/status (last @args)))
+            "last callback call has :failure status on wall-clock timeout")))))
+
+(deftest test-max-wall-clock-duration-shape
+  (let [strategy [100 200 300]
+        result   (a/max-wall-clock-duration 5000 strategy)]
+    (is (map? result) "returns a map")
+    (is (= strategy (::a/strategy result)) "strategy is preserved")
+    (is (= 5000 (::a/wall-clock-timeout result)) "timeout is stored")))
+
+(defspec spec-max-wall-clock-duration
+  200
+  (prop/for-all
+   [n       (gen/choose 1 10)
+    timeout gen/s-pos-int]
+   ;; Clock advances by (timeout+1) on every call, so after the first failure
+   ;; elapsed >= (timeout+1) > timeout. Exactly 1 attempt is made regardless
+   ;; of strategy length.
+   (let [calls   (atom 0)
+         {:keys [f attempts]} (new-failing-fn)]
+     (with-redefs [a/sleep (constantly nil)
+                   a/current-time-ms #(* (inc timeout) (swap! calls inc))]
+       (try
+         (with-retries (a/max-wall-clock-duration timeout (take n (repeat 0))) (f))
+         (catch Exception _)))
+     (= @attempts 1))))
