@@ -252,6 +252,45 @@ first retry immediately:
   (cons 0 exponential-backoff-strategy))
 ```
 
+### Circuit breaker
+
+A circuit breaker short-circuits calls to a dependency that has been failing
+consistently, giving it time to recover and failing fast in the meantime. Construct
+one breaker and share it across callers:
+
+```clj
+(require '[again.core :as again])
+
+(def breaker
+  (again/circuit-breaker
+    (again/consecutive-failures 5)        ; trip after 5 consecutive failures
+    {:again.core/reset-timeout 30000      ; stay open 30s before a half-open probe
+     :again.core/on-event
+     (fn [{ev :again.core/event from :again.core/from to :again.core/to}]
+       (when (= ev :state-change)
+         (println "breaker" from "->" to)))}))
+
+(again/with-circuit-breaker breaker
+  (call-some-service))
+```
+
+While the breaker is open, `with-circuit-breaker` throws instead of running the
+body; `(again/circuit-open? e)` recognises that exception, and
+`(again/circuit-state breaker)` returns `:closed`, `:open`, or `:half-open`.
+
+Use retries and the breaker together by nesting, breaker innermost, so the breaker
+counts every attempt. A retry callback can stop early once the breaker opens:
+
+```clj
+(again/with-retries
+  {:again.core/strategy (again/max-retries 10 (again/constant-strategy 100))
+   :again.core/callback (fn [{e :again.core/exception}]
+                          (when (and e (again/circuit-open? e))
+                            :again.core/fail))}
+  (again/with-circuit-breaker breaker
+    (call-some-service)))
+```
+
 ## License
 
 Copyright © 2014–2026 Listora, Lauri Pesonen
