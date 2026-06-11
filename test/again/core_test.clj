@@ -557,3 +557,25 @@
   (testing "rejects a non-positive threshold"
     (is (thrown? AssertionError (a/consecutive-failures 0)))
     (is (thrown? AssertionError (a/consecutive-failures -1)))))
+
+(deftest test-circuit-breaker-constructor
+  (testing "a new breaker starts closed"
+    (is (= :closed (a/circuit-state (a/circuit-breaker (a/consecutive-failures 3))))))
+
+  (testing "reset-timeout defaults to 60000 ms"
+    (is (= 60000 (::a/reset-timeout (a/circuit-breaker (a/consecutive-failures 3))))))
+
+  (testing "reset-timeout can be overridden"
+    (is (= 5000 (::a/reset-timeout
+                 (a/circuit-breaker (a/consecutive-failures 3) {::a/reset-timeout 5000})))))
+
+  (testing "on-event defaults to a function"
+    (is (fn? (::a/on-event (a/circuit-breaker (a/consecutive-failures 3))))))
+
+  (testing "user-context is absent unless supplied, and present when supplied"
+    (is (not (contains? (a/circuit-breaker (a/consecutive-failures 3)) ::a/user-context)))
+    (is (= :ctx (::a/user-context
+                 (a/circuit-breaker (a/consecutive-failures 3) {::a/user-context :ctx})))))
+
+  (testing "rejects a value that is not a BreakerPolicy"
+    (is (thrown? AssertionError (a/circuit-breaker :not-a-policy)))))
