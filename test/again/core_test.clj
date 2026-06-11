@@ -715,3 +715,23 @@
                                    ::a/user-context ctx})]
     (a/with-circuit-breaker cb :ok)
     (is (= ctx (::a/user-context (first @events))) "user-context is attached to events")))
+
+(deftest test-circuit-breaker-with-retries-integration
+  (with-redefs [a/sleep (constantly nil)]
+    (testing "breaker-innermost counts each attempt; a ::fail callback stops retrying once open"
+      (let [cb           (a/circuit-breaker (a/consecutive-failures 3))
+            boom         (Exception. "boom")
+            attempts     (atom 0)
+            stop-on-open (fn [{e ::a/exception}]
+                           (when (and e (a/circuit-open? e)) ::a/fail))]
+        (try
+          (with-retries
+            {::a/strategy (repeat 10 1)
+             ::a/callback stop-on-open}
+            (a/with-circuit-breaker cb
+              (swap! attempts inc)
+              (throw boom)))
+          (catch Exception _))
+        (is (= :open (a/circuit-state cb)) "the breaker opened during the retries")
+        (is (= 3 @attempts)
+            "the body ran 3 times (each attempt counted); attempt 4 short-circuited and the callback stopped the loop")))))
