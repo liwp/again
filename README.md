@@ -1,5 +1,7 @@
 # Again
 
+[![CI](https://github.com/liwp/again/actions/workflows/ci.yml/badge.svg)](https://github.com/liwp/again/actions/workflows/ci.yml)
+
 A Clojure library for retrying an operation based on a retry strategy.
 
 ## Clojars
@@ -215,6 +217,23 @@ combined delay of `10s` can be generated as follows:
         (again/multiplicative-strategy 500 1.5)))))
 ```
 
+To limit retries by wall-clock time (including actual execution time, not just
+accumulated delays), use `max-wall-clock-duration` as the outermost wrapper:
+
+```clj
+(def exponential-backoff-strategy-with-timeout
+  (again/max-wall-clock-duration
+    30000
+    (again/max-retries
+      10
+      (again/multiplicative-strategy 500 1.5))))
+```
+
+This stops retrying once 30 seconds have elapsed since the first attempt,
+regardless of how long individual attempts take. Note that
+`max-wall-clock-duration` returns an options map rather than a seq, so it must
+be the outermost manipulator.
+
 We can also prepend a `0` to the strategy in order to execute the
 first retry immediately:
 
@@ -225,7 +244,7 @@ first retry immediately:
 
 ## License
 
-Copyright © 2014–2017 Listora, Lauri Pesonen
+Copyright © 2014–2026 Listora, Lauri Pesonen
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
