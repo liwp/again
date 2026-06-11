@@ -111,7 +111,11 @@
 
 (defn- sleep
   [delay]
-  (Thread/sleep (long delay)))
+  (try
+    (Thread/sleep (long delay))
+    (catch InterruptedException e
+      (.interrupt (Thread/currentThread))
+      (throw e))))
 
 (defn- build-options
   "Turn a strategy-sequence to an options-map (if it's not a map already), and
@@ -145,15 +149,18 @@
                              callback)
                          res)
                        (catch Exception e
-                         (let [timed-out? (when-let [timeout (::wall-clock-timeout options)]
-                                            (>= (- (current-time-ms) (::start-time options))
-                                                timeout))
-                               cb-result  (-> callback-state
-                                              (assoc
-                                               ::exception e
-                                               ::status (if (and delay (not timed-out?)) :retry :failure))
-                                              callback)
-                               retry?     (and (not timed-out?) (not= cb-result ::fail))]
+                         (let [interrupted? (instance? InterruptedException e)
+                               timed-out?   (when-let [timeout (::wall-clock-timeout options)]
+                                              (>= (- (current-time-ms) (::start-time options))
+                                                  timeout))
+                               cb-result    (-> callback-state
+                                                (assoc
+                                                 ::exception e
+                                                 ::status (if (and delay (not timed-out?) (not interrupted?)) :retry :failure))
+                                                callback)
+                               retry?       (and (not timed-out?) (not interrupted?) (not= cb-result ::fail))]
+                           (when interrupted?
+                             (.interrupt (Thread/currentThread)))
                            (if (and delay retry?)
                              (sleep delay)
                              (throw e)))

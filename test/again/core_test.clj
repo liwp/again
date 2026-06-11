@@ -1,9 +1,11 @@
 (ns again.core-test
   (:require [again.core :as a :refer [with-retries]]
-            [clojure.test :refer [is deftest testing]]
+            [clojure.test :refer [is deftest testing use-fixtures]]
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]))
+
+(use-fixtures :each (fn [f] (Thread/interrupted) (try (f) (finally (Thread/interrupted)))))
 
 (defspec spec-max-retries
   200
@@ -449,6 +451,35 @@
                               (f)))))
         (is (= :failure (::a/status (last @args)))
             "last callback call has :failure status on wall-clock timeout")))))
+
+(deftest test-interrupted-exception-not-retried
+  (let [attempts (atom 0)]
+    (with-redefs [a/sleep (constantly nil)]
+      (try
+        (with-retries [100 200]
+          (swap! attempts inc)
+          (throw (InterruptedException.)))
+        (catch InterruptedException _)))
+    (is (= @attempts 1) "InterruptedException should not trigger a retry")))
+
+(deftest test-interrupted-exception-restores-flag
+  (with-redefs [a/sleep (constantly nil)]
+    (try
+      (with-retries [100 200]
+        (throw (InterruptedException.)))
+      (catch InterruptedException _
+        (is (.isInterrupted (Thread/currentThread))
+            "interrupt flag must be restored when InterruptedException propagates")))))
+
+(deftest test-sleep-restores-interrupt-flag
+  (let [sleep-fn    #'again.core/sleep
+        test-thread (Thread/currentThread)]
+    (future (Thread/sleep 20) (.interrupt test-thread))
+    (try
+      (sleep-fn 10000)
+      (catch InterruptedException _
+        (is (.isInterrupted (Thread/currentThread))
+            "sleep must restore the interrupt flag before rethrowing")))))
 
 (deftest test-max-wall-clock-duration-shape
   (let [strategy [100 200 300]
