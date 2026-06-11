@@ -78,7 +78,7 @@ The core namespace provides:
 - strategy builders such as `constant-strategy`, `additive-strategy`,
   `multiplicative-strategy`, and `immediate-strategy`
 - strategy manipulators such as `max-retries`, `max-delay`, `max-duration`,
-  `clamp-delay`, and `randomize-strategy`
+  `max-wall-clock-duration`, `clamp-delay`, and `randomize-strategy`
 - `with-retries`, a macro for wrapping an existing form and retrying it when it
   throws
 
@@ -87,4 +87,6 @@ The core namespace provides:
 - Keep the public API small and compatible where practical.
 - Prefer deterministic tests; use `with-redefs` for sleep or time-sensitive
   behavior.
+- Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change (new
+  functions, behaviour fixes, breaking changes).
 - Use Beads (`bd`) for task tracking rather than markdown TODO lists.

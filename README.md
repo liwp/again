@@ -24,6 +24,29 @@ clojure -M:test
 
 Release coordinate: `listora/again`. Releases are published to Clojars.
 
+### Releasing
+
+1. **Update version references** — bump the version in `README.md` (the
+   Clojars snippet) and the `deps.edn` comment.
+
+2. **Update `CHANGELOG.md`** — rename the `[Unreleased]` section to the new
+   version with today's date, add a fresh empty `[Unreleased]` section at the
+   top, and update the comparison links at the bottom.
+
+3. **Commit and tag:**
+   ```sh
+   git commit -am "Release x.y.z"
+   git tag vx.y.z
+   git push origin main --tags
+   ```
+
+4. **Deploy to Clojars** — set `CLOJARS_USERNAME` and `CLOJARS_PASSWORD` (use
+   a deploy token, not your account password), then run:
+   ```sh
+   clojure -T:build jar
+   clojure -T:build deploy
+   ```
+
 ---
 
 ## Usage

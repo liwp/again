@@ -39,6 +39,11 @@ bd close <id>         # Complete work
 bd dolt push          # Push beads data to remote
 ```
 
+## Conventions
+
+- Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change (new
+  functions, behaviour fixes, breaking changes).
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
