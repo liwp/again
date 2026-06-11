@@ -223,3 +223,37 @@
   exception (ie return early)."
   [strategy-or-options & body]
   `(with-retries* ~strategy-or-options (fn [] ~@body)))
+
+(defprotocol BreakerPolicy
+  "Decides when a closed circuit breaker should trip open, from observed call
+  outcomes. Implementations are immutable values; the breaker stores the current
+  policy in its state and swaps in the next one after each recorded outcome. The
+  state machine itself (open/half-open/closed) lives in the breaker runtime, not
+  here. This is the extension seam for alternative trip policies (e.g. a rolling
+  window) — implement the three methods over your own immutable value."
+  (observe [policy outcome now]
+    "Return an updated policy incorporating a call `outcome` (`:success` or
+    `:failure`) observed at `now` (epoch ms).")
+  (tripped? [policy now]
+    "True if the breaker should open, given the outcomes observed so far.")
+  (reset [policy]
+    "Return the policy with its accumulated outcome state cleared but its
+    configuration preserved. Called when the breaker (re)closes."))
+
+(defrecord ConsecutiveFailures [threshold failures]
+  BreakerPolicy
+  (observe [this outcome _now]
+    (if (= outcome :failure)
+      (update this :failures inc)
+      (assoc this :failures 0)))
+  (tripped? [_this _now]
+    (>= failures threshold))
+  (reset [this]
+    (assoc this :failures 0)))
+
+(defn consecutive-failures
+  "Returns a `BreakerPolicy` that trips after `threshold` consecutive failures.
+  A single success resets the count."
+  [threshold]
+  {:pre [(pos? threshold)]}
+  (->ConsecutiveFailures threshold 0))

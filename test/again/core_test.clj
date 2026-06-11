@@ -517,3 +517,43 @@
          (with-retries (a/max-wall-clock-duration timeout (take n (repeat 0))) (f))
          (catch Exception _)))
      (= @attempts 1))))
+
+(deftest test-consecutive-failures-policy
+  (testing "does not trip before reaching the threshold of consecutive failures"
+    (let [p0 (a/consecutive-failures 3)
+          p1 (a/observe p0 :failure 0)
+          p2 (a/observe p1 :failure 0)]
+      (is (not (a/tripped? p0 0)))
+      (is (not (a/tripped? p1 0)))
+      (is (not (a/tripped? p2 0)))))
+
+  (testing "trips on the threshold-th consecutive failure"
+    (let [p (-> (a/consecutive-failures 3)
+                (a/observe :failure 0)
+                (a/observe :failure 0)
+                (a/observe :failure 0))]
+      (is (a/tripped? p 0))))
+
+  (testing "a success resets the failure count"
+    (let [p (-> (a/consecutive-failures 2)
+                (a/observe :failure 0)
+                (a/observe :success 0)
+                (a/observe :failure 0))]
+      (is (not (a/tripped? p 0)))))
+
+  (testing "reset clears accumulated failures and returns a working policy"
+    (let [p (-> (a/consecutive-failures 2)
+                (a/observe :failure 0)
+                (a/observe :failure 0))]
+      (is (a/tripped? p 0))
+      (let [p' (a/reset p)]
+        (is (not (a/tripped? p' 0)))
+        (is (a/tripped? (-> p'
+                            (a/observe :failure 0)
+                            (a/observe :failure 0))
+                        0)
+            "failures accumulate again after reset"))))
+
+  (testing "rejects a non-positive threshold"
+    (is (thrown? AssertionError (a/consecutive-failures 0)))
+    (is (thrown? AssertionError (a/consecutive-failures -1)))))
