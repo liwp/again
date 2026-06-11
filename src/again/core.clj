@@ -257,3 +257,32 @@
   [threshold]
   {:pre [(pos? threshold)]}
   (->ConsecutiveFailures threshold 0))
+
+(def ^:private default-reset-timeout
+  "Default ms a breaker stays open before admitting a half-open probe."
+  60000)
+
+(defn circuit-breaker
+  "Returns a stateful circuit breaker driven by `policy` (a `BreakerPolicy`).
+  The breaker is shared across callers and threads; construct it once.
+
+  `options` keys (all namespaced under `again.core`):
+
+    `::reset-timeout`  ms to stay open before admitting a half-open probe
+                       (default 60000)
+    `::on-event`       fn called with an event map after each notable event
+                       (see `with-circuit-breaker`); defaults to a no-op
+    `::user-context`   opaque value included in every `::on-event` map"
+  ([policy] (circuit-breaker policy {}))
+  ([policy options]
+   {:pre [(satisfies? BreakerPolicy policy)]}
+   (cond-> {::reset-timeout (get options ::reset-timeout default-reset-timeout)
+            ::on-event (get options ::on-event (constantly nil))
+            ::state (atom {::circuit :closed ::policy policy ::opened-at nil})}
+     (contains? options ::user-context)
+     (assoc ::user-context (::user-context options)))))
+
+(defn circuit-state
+  "Returns the current state of `breaker`: `:closed`, `:open`, or `:half-open`."
+  [breaker]
+  (::circuit @(::state breaker)))
