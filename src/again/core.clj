@@ -290,23 +290,44 @@
 (defn- decide-allow
   "Pure step: given the current breaker `state`, decide whether a call may
   proceed. Returns {::permitted? bool ::next <state> ::transition [from to]|nil}.
-  (Closed-only for now; the open/half-open logic is added later.)"
-  [state _now _reset-timeout]
-  (if (= (::circuit state) :closed)
-    {::permitted? true ::next state ::transition nil}
-    {::permitted? false ::next state ::transition nil}))
+  When the breaker is open and the reset timeout has elapsed, exactly one caller
+  is admitted as a half-open probe; others are denied while it is in flight."
+  [state now reset-timeout]
+  (case (::circuit state)
+    :closed    {::permitted? true  ::next state ::transition nil}
+    :half-open {::permitted? false ::next state ::transition nil}
+    :open      (if (>= (- now (::opened-at state)) reset-timeout)
+                 {::permitted? true
+                  ::next       (assoc state ::circuit :half-open)
+                  ::transition [:open :half-open]}
+                 {::permitted? false ::next state ::transition nil})))
 
 (defn- decide-record
   "Pure step: given the current breaker `state` and a call `outcome`, decide the
-  next state. Returns {::next <state> ::transition [from to]|nil}."
+  next state. Returns {::next <state> ::transition [from to]|nil}. Half-open
+  transitions are decided purely by the probe outcome; the policy is consulted
+  only while closed and reset on close."
   [state outcome now]
-  (if (= (::circuit state) :closed)
+  (case (::circuit state)
+    :closed
     (let [policy' (observe (::policy state) outcome now)]
       (if (tripped? policy' now)
         {::next       (assoc state ::circuit :open ::policy policy' ::opened-at now)
          ::transition [:closed :open]}
         {::next       (assoc state ::policy policy')
          ::transition nil}))
+
+    :half-open
+    (if (= outcome :success)
+      {::next       (assoc state ::circuit :closed ::policy (reset (::policy state)) ::opened-at nil)
+       ::transition [:half-open :closed]}
+      ;; A failed probe re-opens; ::policy is deliberately left untouched (the
+      ;; tripped state carried from the original open is preserved) and is only
+      ;; reset on a successful re-close above.
+      {::next       (assoc state ::circuit :open ::opened-at now)
+       ::transition [:half-open :open]})
+
+    :open
     {::next state ::transition nil}))
 
 (defn- allow!

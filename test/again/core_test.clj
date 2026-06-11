@@ -619,3 +619,53 @@
                  (catch Exception ex ex))]
       (is (a/circuit-open? e) "an open breaker throws a circuit-open exception")
       (is (= 0 @calls) "the wrapped body is not executed while open"))))
+
+(deftest test-circuit-breaker-half-open-probe-closes
+  (let [clock (atom 0)]
+    (with-redefs [a/current-time-ms (fn [] @clock)]
+      (let [cb   (a/circuit-breaker (a/consecutive-failures 1) {::a/reset-timeout 1000})
+            boom (Exception. "boom")]
+        (is (thrown? Exception (a/with-circuit-breaker cb (throw boom))))
+        (is (= :open (a/circuit-state cb)))
+
+        (reset! clock 500)
+        (is (a/circuit-open? (try (a/with-circuit-breaker cb :nope) (catch Exception e e)))
+            "still short-circuits before the reset timeout elapses")
+        (is (= :open (a/circuit-state cb)))
+
+        (reset! clock 1000)
+        (is (= :ok (a/with-circuit-breaker cb :ok)) "admits a probe once the timeout elapses")
+        (is (= :closed (a/circuit-state cb)) "a successful probe closes the breaker")))))
+
+(deftest test-circuit-breaker-half-open-failure-reopens
+  (let [clock (atom 0)]
+    (with-redefs [a/current-time-ms (fn [] @clock)]
+      (let [cb   (a/circuit-breaker (a/consecutive-failures 1) {::a/reset-timeout 1000})
+            boom (Exception. "boom")]
+        (is (thrown? Exception (a/with-circuit-breaker cb (throw boom))))
+
+        (reset! clock 1000)
+        (is (thrown? Exception (a/with-circuit-breaker cb (throw boom)))
+            "the probe runs but fails")
+        (is (= :open (a/circuit-state cb)) "a failed probe re-opens the breaker")
+
+        (reset! clock 1500)
+        (is (a/circuit-open? (try (a/with-circuit-breaker cb :nope) (catch Exception e e)))
+            "opened-at was restamped, so the timeout window restarts")
+
+        (reset! clock 2000)
+        (is (= :ok (a/with-circuit-breaker cb :ok)))
+        (is (= :closed (a/circuit-state cb)))))))
+
+(deftest test-circuit-breaker-half-open-single-probe
+  (let [clock  (atom 0)
+        allow! #'again.core/allow!]
+    (with-redefs [a/current-time-ms (fn [] @clock)]
+      (let [cb   (a/circuit-breaker (a/consecutive-failures 1) {::a/reset-timeout 1000})
+            boom (Exception. "boom")]
+        (is (thrown? Exception (a/with-circuit-breaker cb (throw boom))))
+        (reset! clock 1000)
+        (is (= true (::a/permitted? (allow! cb))) "first caller is admitted as the probe")
+        (is (= :half-open (a/circuit-state cb)))
+        (is (= false (::a/permitted? (allow! cb)))
+            "a second caller is denied while the probe is in flight")))))
