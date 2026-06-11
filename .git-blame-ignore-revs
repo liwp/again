@@ -1,0 +1,6 @@
+# Formatting-only commits — ignored by git blame
+# Use: git blame --ignore-revs-file .git-blame-ignore-revs
+# Or set permanently: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# ag-18s: set up cljfmt and reformat codebase
+de070157626e037ed9cce4d2180c928d14619baf
