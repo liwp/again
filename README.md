@@ -16,6 +16,8 @@ With `deps.edn`:
 listora/again {:mvn/version "1.0.0"}
 ```
 
+Requires Clojure 1.8 or later.
+
 ## Development
 
 Run the test suite with the Clojure CLI:

@@ -87,6 +87,8 @@ The core namespace provides:
 - Keep the public API small and compatible where practical.
 - Prefer deterministic tests; use `with-redefs` for sleep or time-sensitive
   behavior.
+- Keep library code compatible with Clojure 1.8+; don't use language features
+  introduced in 1.9 or later (e.g. spec, `update-vals`, `parse-long`).
 - Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change (new
   functions, behaviour fixes, breaking changes).
 - Use Beads (`bd`) for task tracking rather than markdown TODO lists.

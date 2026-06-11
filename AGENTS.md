@@ -41,6 +41,8 @@ bd dolt push          # Push beads data to remote
 
 ## Conventions
 
+- Keep library code compatible with Clojure 1.8+; don't use language features
+  introduced in 1.9 or later (e.g. spec, `update-vals`, `parse-long`).
 - Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change (new
   functions, behaviour fixes, breaking changes).
 
