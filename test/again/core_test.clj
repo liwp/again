@@ -309,7 +309,7 @@
     (is (thrown? AssertionError (a/max-wall-clock-duration -1 (a/constant-strategy 100)))))
   (testing "max-wall-clock-duration rejects nested max-wall-clock-duration"
     (is (thrown? AssertionError
-          (a/max-wall-clock-duration 5000 (a/max-wall-clock-duration 3000 (a/constant-strategy 100))))))
+                 (a/max-wall-clock-duration 5000 (a/max-wall-clock-duration 3000 (a/constant-strategy 100))))))
   (let [s (a/max-retries 1 (a/constant-strategy 100))]
     (testing "randomize-strategy rejects rand-factor of 0"
       (is (thrown? AssertionError (a/randomize-strategy 0 s))))
@@ -409,7 +409,7 @@
             {:keys [f attempts]} (new-failing-fn)]
         (with-redefs [a/current-time-ms #(case (swap! calls inc) 1 0 11000)]
           (is (thrown? Exception
-                (with-retries (a/max-wall-clock-duration 10000 [100 100 100]) (f)))))
+                       (with-retries (a/max-wall-clock-duration 10000 [100 100 100]) (f)))))
         (is (= @attempts 1) "only 1 attempt before wall-clock timeout fires")))
 
     (testing "timeout not yet reached — all retries in strategy proceed"
@@ -424,7 +424,7 @@
       (let [{:keys [f attempts]} (new-failing-fn)]
         (with-redefs [a/current-time-ms (constantly 0)]
           (is (thrown? Exception
-                (with-retries (a/max-wall-clock-duration 0 [100 100 100]) (f)))))
+                       (with-retries (a/max-wall-clock-duration 0 [100 100 100]) (f)))))
         (is (= @attempts 1) "only 1 attempt with zero timeout")))
 
     (testing "success path is unaffected"
@@ -437,7 +437,7 @@
       (let [{:keys [f attempts]} (new-failing-fn)]
         (with-redefs [a/current-time-ms (constantly 0)]
           (is (thrown? Exception
-                (with-retries (a/max-wall-clock-duration 10000 [100]) (f)))))
+                       (with-retries (a/max-wall-clock-duration 10000 [100]) (f)))))
         (is (= @attempts 2) "1 initial + 1 retry before strategy runs out")))
 
     (testing "callback receives :failure status when wall-clock timeout fires"
@@ -446,9 +446,9 @@
             {:keys [args callback]} (new-callback-fn)]
         (with-redefs [a/current-time-ms #(case (swap! calls inc) 1 0 11000)]
           (is (thrown? Exception
-                (with-retries (merge (a/max-wall-clock-duration 10000 [100 100])
-                                     {::a/callback callback})
-                              (f)))))
+                       (with-retries (merge (a/max-wall-clock-duration 10000 [100 100])
+                                            {::a/callback callback})
+                         (f)))))
         (is (= :failure (::a/status (last @args)))
             "last callback call has :failure status on wall-clock timeout")))))
 
