@@ -684,3 +684,34 @@
         (a/with-circuit-breaker cb (throw (InterruptedException.)))
         (catch InterruptedException _
           (is (.isInterrupted (Thread/currentThread))))))))
+
+(deftest test-circuit-breaker-events
+  (let [clock (atom 0)]
+    (with-redefs [a/current-time-ms (fn [] @clock)]
+      (let [events  (atom [])
+            cb      (a/circuit-breaker (a/consecutive-failures 1)
+                                       {::a/reset-timeout 1000
+                                        ::a/on-event      #(swap! events conj %)})
+            boom    (Exception. "boom")]
+        (a/with-circuit-breaker cb :ok)
+        (is (thrown? Exception (a/with-circuit-breaker cb (throw boom))))
+        (is (a/circuit-open? (try (a/with-circuit-breaker cb :nope) (catch Exception e e))))
+
+        (let [evs @events]
+          (is (= [:success :failure :state-change :short-circuit]
+                 (map ::a/event evs))
+              "fires success, then failure + the resulting state-change, then short-circuit")
+          (let [sc (first (filter #(= :state-change (::a/event %)) evs))]
+            (is (= :closed (::a/from sc)))
+            (is (= :open (::a/to sc))))
+          (let [f (first (filter #(= :failure (::a/event %)) evs))]
+            (is (= boom (::a/exception f)) "the failure event carries the exception")))))))
+
+(deftest test-circuit-breaker-events-user-context
+  (let [events (atom [])
+        ctx    {:name "svc"}
+        cb     (a/circuit-breaker (a/consecutive-failures 3)
+                                  {::a/on-event     #(swap! events conj %)
+                                   ::a/user-context ctx})]
+    (a/with-circuit-breaker cb :ok)
+    (is (= ctx (::a/user-context (first @events))) "user-context is attached to events")))

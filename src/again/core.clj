@@ -357,22 +357,41 @@
           (dissoc decision ::next)
           (recur))))))
 
+(defn- emit!
+  "Call the breaker's `::on-event` with `base`, adding `::user-context` if the
+  breaker was configured with one."
+  [breaker base]
+  ((::on-event breaker)
+   (cond-> base
+     (contains? breaker ::user-context)
+     (assoc ::user-context (::user-context breaker)))))
+
 (defn with-circuit-breaker*
   "Functional core of `with-circuit-breaker`: runs `f` through `breaker`."
   [breaker f]
-  (let [{permitted? ::permitted?} (allow! breaker)]
+  (let [{permitted? ::permitted? transition ::transition} (allow! breaker)]
+    (when transition
+      (emit! breaker {::event :state-change ::from (first transition) ::to (second transition)}))
     (if permitted?
       (try
-        (let [result (f)]
-          (record! breaker :success)
+        (let [result           (f)
+              {t ::transition} (record! breaker :success)]
+          (emit! breaker {::event :success})
+          (when t
+            (emit! breaker {::event :state-change ::from (first t) ::to (second t)}))
           result)
         (catch InterruptedException e
           (.interrupt (Thread/currentThread))
           (throw e))
         (catch Exception e
-          (record! breaker :failure)
+          (let [{t ::transition} (record! breaker :failure)]
+            (emit! breaker {::event :failure ::exception e})
+            (when t
+              (emit! breaker {::event :state-change ::from (first t) ::to (second t)})))
           (throw e)))
-      (throw (ex-info "again.core circuit breaker is open" {::circuit-open true})))))
+      (do
+        (emit! breaker {::event :short-circuit})
+        (throw (ex-info "again.core circuit breaker is open" {::circuit-open true}))))))
 
 (defmacro with-circuit-breaker
   "Run `body` through `breaker`. While the breaker is closed (or admitting a
@@ -384,6 +403,13 @@
   and then rethrown — except `InterruptedException`, which is rethrown with the
   interrupt flag restored and is NOT recorded (a caller interrupt is not a
   dependency-health signal).
+
+  The breaker's `::on-event` callback (see `circuit-breaker`) is invoked with a
+  map after each notable event: `{::event <type> ::user-context <ctx>}`, where
+  `<type>` is `:success`, `:failure`, `:short-circuit`, or `:state-change`. A
+  `:state-change` event also carries `::from` and `::to` states; a `:failure`
+  event also carries the `::exception`; `::user-context` is present only if one
+  was configured.
 
   Compose with `with-retries` by nesting, breaker innermost, so the breaker sees
   every attempt:
