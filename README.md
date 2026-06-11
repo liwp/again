@@ -26,6 +26,13 @@ Run the test suite with the Clojure CLI:
 clojure -X:test
 ```
 
+Check (or fix) formatting with cljfmt:
+
+```sh
+clojure -M:fmt/check
+clojure -M:fmt/fix
+```
+
 Release coordinate: `listora/again`. Releases are published to Clojars.
 
 ### Releasing

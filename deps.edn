@@ -16,6 +16,14 @@
                 io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
    :exec-fn cognitect.test-runner.api/test}
 
+  :fmt/check
+  {:deps {cljfmt/cljfmt {:mvn/version "0.9.2"}}
+   :main-opts ["-m" "cljfmt.main" "check" "src" "test" "build.clj" "deps.edn"]}
+
+  :fmt/fix
+  {:deps {cljfmt/cljfmt {:mvn/version "0.9.2"}}
+   :main-opts ["-m" "cljfmt.main" "fix" "src" "test" "build.clj" "deps.edn"]}
+
   :build
   {:deps {org.clojure/tools.build {:mvn/version "0.9.2"}
           slipset/deps-deploy     {:mvn/version "0.2.5"}}

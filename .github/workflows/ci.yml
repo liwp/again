@@ -27,5 +27,8 @@ jobs:
           restore-keys: |
             clojure-${{ runner.os }}-
 
+      - name: Check formatting
+        run: clojure -M:fmt/check
+
       - name: Run tests
         run: clojure -X:test

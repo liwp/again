@@ -17,11 +17,11 @@
   increases by `increment` (ms) after each retry. The single argument version
   uses the given increment as both the initial delay and the increment."
   ([increment]
-     (additive-strategy increment increment))
+   (additive-strategy increment increment))
   ([initial-delay increment]
-     {:pre [(>= initial-delay 0)
-            (>= increment 0)]}
-     (iterate #(+ increment %) (bigint initial-delay))))
+   {:pre [(>= initial-delay 0)
+          (>= increment 0)]}
+   (iterate #(+ increment %) (bigint initial-delay))))
 
 (defn stop-strategy
   "A no-retries policy."
