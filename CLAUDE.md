@@ -64,7 +64,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 This project uses `deps.edn` and the Clojure CLI.
 
 ```bash
-clojure -M:test
+clojure -X:test
 ```
 
 ## Architecture Overview

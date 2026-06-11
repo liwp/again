@@ -21,7 +21,7 @@ listora/again {:mvn/version "1.0.0"}
 Run the test suite with the Clojure CLI:
 
 ```sh
-clojure -M:test
+clojure -X:test
 ```
 
 Release coordinate: `listora/again`. Releases are published to Clojars.

@@ -13,7 +13,7 @@ behavior.
 The project uses `deps.edn` and the Clojure CLI.
 
 ```bash
-clojure -M:test
+clojure -X:test
 ```
 
 This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.

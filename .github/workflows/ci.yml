@@ -28,4 +28,4 @@ jobs:
             clojure-${{ runner.os }}-
 
       - name: Run tests
-        run: clojure -M:test
+        run: clojure -X:test
