@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time since the first attempt exceeds a given timeout. Unlike `max-duration`,
   this accounts for actual execution time, not just accumulated delays.
 
+### Added
+- Callback `::status` gains a new `:interrupted` value when retrying is stopped
+  by an `InterruptedException`, distinguishing it from `:failure` (retries
+  exhausted). **Note:** callers that dispatch exhaustively on `::status` without
+  a `:default` arm will need to add an `:interrupted` case.
+
 ### Fixed
 - `InterruptedException` now stops retrying immediately; the thread interrupt
   flag is restored before rethrowing so callers can detect the interruption.

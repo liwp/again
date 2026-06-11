@@ -471,6 +471,19 @@
         (is (.isInterrupted (Thread/currentThread))
             "interrupt flag must be restored when InterruptedException propagates")))))
 
+(deftest test-interrupted-exception-callback-status
+  (let [callback-args (atom [])]
+    (with-redefs [a/sleep (constantly nil)]
+      (try
+        (with-retries
+          {::a/callback #(swap! callback-args conj %)
+           ::a/strategy [100 200]}
+          (throw (InterruptedException.)))
+        (catch InterruptedException _)))
+    (is (= 1 (count @callback-args)) "callback is called once")
+    (is (= :interrupted (::a/status (first @callback-args)))
+        "callback receives :interrupted status")))
+
 (deftest test-sleep-restores-interrupt-flag
   (let [sleep-fn    #'again.core/sleep
         test-thread (Thread/currentThread)]

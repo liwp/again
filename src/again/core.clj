@@ -156,7 +156,10 @@
                                cb-result    (-> callback-state
                                                 (assoc
                                                  ::exception e
-                                                 ::status (if (and delay (not timed-out?) (not interrupted?)) :retry :failure))
+                                                 ::status (cond
+                                                            (and delay (not timed-out?) (not interrupted?)) :retry
+                                                            interrupted? :interrupted
+                                                            :else :failure))
                                                 callback)
                                retry?       (and (not timed-out?) (not interrupted?) (not= cb-result ::fail))]
                            (when interrupted?
@@ -212,7 +215,7 @@
   {:again.core/attempts <the number of attempts thus far>
    :again.core/exception <the exception thrown by body>
    :again.core/slept <the sum of all delays thus far>
-   :again.core/status <the result of the last attempt: :success, :failure, or :retry
+   :again.core/status <the result of the last attempt: :success, :retry, :failure, or :interrupted
    :again.core/user-context <the user context from the options map>}
 
   The callback function can return `:again.core/fail` to instruct `with-retries`
