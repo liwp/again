@@ -87,6 +87,28 @@
       (cons f
             (lazy-seq (max-duration (- timeout f) r))))))
 
+(defn- current-time-ms [] (System/currentTimeMillis))
+
+(defn max-wall-clock-duration
+  "Stop retrying once wall-clock time since the first attempt exceeds
+  timeout-ms. Unlike max-duration, this includes actual execution time,
+  not just accumulated delays.
+
+  Returns an options map for use with with-retries. Because it returns a
+  map rather than a seq, it must be the outermost manipulator — other
+  manipulators (max-retries, clamp-delay, etc.) should be applied to the
+  strategy before passing it here.
+
+  The returned map can be merged with other with-retries options such as
+  ::callback and ::user-context, or ::wall-clock-timeout can be set
+  directly in the options map passed to with-retries instead of using
+  this function."
+  [timeout-ms retry-strategy]
+  {:pre [(>= timeout-ms 0)
+         (not (map? retry-strategy))]}
+  {::strategy retry-strategy
+   ::wall-clock-timeout timeout-ms})
+
 (defn- sleep
   [delay]
   (Thread/sleep (long delay)))
@@ -107,6 +129,9 @@
          delays ::strategy
          :as options}
         (build-options strategy-or-options)
+        options (cond-> options
+                  (::wall-clock-timeout options)
+                  (assoc ::start-time (current-time-ms)))
 
         callback-state (merge
                         {::attempts 1 ::slept 0}
@@ -120,12 +145,15 @@
                              callback)
                          res)
                        (catch Exception e
-                         (let [retry? (-> callback-state
-                                         (assoc
-                                          ::exception e
-                                          ::status (if delay :retry :failure))
-                                         callback
-                                         (not= ::fail))]
+                         (let [timed-out? (when-let [timeout (::wall-clock-timeout options)]
+                                            (>= (- (current-time-ms) (::start-time options))
+                                                timeout))
+                               cb-result  (-> callback-state
+                                              (assoc
+                                               ::exception e
+                                               ::status (if (and delay (not timed-out?)) :retry :failure))
+                                              callback)
+                               retry?     (and (not timed-out?) (not= cb-result ::fail))]
                            (if (and delay retry?)
                              (sleep delay)
                              (throw e)))
@@ -146,7 +174,7 @@
   for a total of five attempts, with 100ms sleeps in between attempts. Note:
   infinite strategies are supported, but maybe not encouraged…
 
-  Strategies can be built with the provided builder fns, eg `linear-strategy`,
+  Strategies can be built with the provided builder fns, eg `additive-strategy`,
   and modified with the provided manipulator fns, eg `clamp-delay`, but you can
   also create any custom seq of delays that suits your use case.
 
@@ -155,7 +183,8 @@
 
   {:again.core/callback <fn>
    :again.core/strategy <delay strategy>
-   :again.core/user-context <anything, but probably an atom>}
+   :again.core/user-context <anything, but probably an atom>
+   :again.core/wall-clock-timeout <ms>}
 
   `:again.core/callback` is a callback function that is called after each
   attempt.
@@ -164,6 +193,11 @@
 
   `:again.core/user-context` is an opaque value that is passed to the callback
   function as an argument.
+
+  `:again.core/wall-clock-timeout` stops retrying once wall-clock elapsed time
+  since the first attempt exceeds this value (ms). Unlike the delay-summing
+  `max-duration` manipulator, this accounts for actual execution time. Setting
+  this key directly is equivalent to using `max-wall-clock-duration`.
 
   The callback function is called with the following type of map as its only
   argument:
