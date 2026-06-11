@@ -669,3 +669,18 @@
         (is (= :half-open (a/circuit-state cb)))
         (is (= false (::a/permitted? (allow! cb)))
             "a second caller is denied while the probe is in flight")))))
+
+(deftest test-circuit-breaker-interrupt-not-recorded
+  (testing "InterruptedException does not count as a failure"
+    (let [cb (a/circuit-breaker (a/consecutive-failures 1))]
+      (try
+        (a/with-circuit-breaker cb (throw (InterruptedException.)))
+        (catch InterruptedException _))
+      (is (= :closed (a/circuit-state cb)) "an interrupt did not trip the breaker")))
+
+  (testing "the interrupt flag is restored before the exception propagates"
+    (let [cb (a/circuit-breaker (a/consecutive-failures 1))]
+      (try
+        (a/with-circuit-breaker cb (throw (InterruptedException.)))
+        (catch InterruptedException _
+          (is (.isInterrupted (Thread/currentThread))))))))

@@ -366,6 +366,9 @@
         (let [result (f)]
           (record! breaker :success)
           result)
+        (catch InterruptedException e
+          (.interrupt (Thread/currentThread))
+          (throw e))
         (catch Exception e
           (record! breaker :failure)
           (throw e)))
@@ -378,7 +381,9 @@
   circuit-open exception (recognised by `circuit-open?`) is thrown instead.
 
   Any thrown `Exception` counts as a failure: it is recorded against the breaker
-  and then rethrown.
+  and then rethrown — except `InterruptedException`, which is rethrown with the
+  interrupt flag restored and is NOT recorded (a caller interrupt is not a
+  dependency-health signal).
 
   Compose with `with-retries` by nesting, breaker innermost, so the breaker sees
   every attempt:
