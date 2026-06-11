@@ -28,8 +28,9 @@ Release coordinate: `listora/again`. Releases are published to Clojars.
 
 ### Releasing
 
-1. **Update version references** — bump the version in `README.md` (the
-   Clojars snippet) and the `deps.edn` comment.
+1. **Update version references** — bump the version in `build.clj` (the
+   `version` var), `README.md` (the Clojars snippet), and the `deps.edn`
+   comment.
 
 2. **Update `CHANGELOG.md`** — rename the `[Unreleased]` section to the new
    version with today's date, add a fresh empty `[Unreleased]` section at the
