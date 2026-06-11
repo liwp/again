@@ -286,3 +286,90 @@
   "Returns the current state of `breaker`: `:closed`, `:open`, or `:half-open`."
   [breaker]
   (::circuit @(::state breaker)))
+
+(defn- decide-allow
+  "Pure step: given the current breaker `state`, decide whether a call may
+  proceed. Returns {::permitted? bool ::next <state> ::transition [from to]|nil}.
+  (Closed-only for now; the open/half-open logic is added later.)"
+  [state _now _reset-timeout]
+  (if (= (::circuit state) :closed)
+    {::permitted? true ::next state ::transition nil}
+    {::permitted? false ::next state ::transition nil}))
+
+(defn- decide-record
+  "Pure step: given the current breaker `state` and a call `outcome`, decide the
+  next state. Returns {::next <state> ::transition [from to]|nil}."
+  [state outcome now]
+  (if (= (::circuit state) :closed)
+    (let [policy' (observe (::policy state) outcome now)]
+      (if (tripped? policy' now)
+        {::next       (assoc state ::circuit :open ::policy policy' ::opened-at now)
+         ::transition [:closed :open]}
+        {::next       (assoc state ::policy policy')
+         ::transition nil}))
+    {::next state ::transition nil}))
+
+(defn- allow!
+  "Atomically apply `decide-allow` to the breaker, retrying on contention.
+  Returns {::permitted? bool ::transition [from to]|nil}."
+  [breaker]
+  (let [a             (::state breaker)
+        reset-timeout (::reset-timeout breaker)]
+    (loop []
+      (let [s        @a
+            decision (decide-allow s (current-time-ms) reset-timeout)
+            next     (::next decision)]
+        (if (or (identical? next s) (compare-and-set! a s next))
+          (dissoc decision ::next)
+          (recur))))))
+
+(defn- record!
+  "Atomically apply `decide-record` to the breaker, retrying on contention.
+  Returns {::transition [from to]|nil}."
+  [breaker outcome]
+  (let [a (::state breaker)]
+    (loop []
+      (let [s        @a
+            decision (decide-record s outcome (current-time-ms))
+            next     (::next decision)]
+        (if (or (identical? next s) (compare-and-set! a s next))
+          (dissoc decision ::next)
+          (recur))))))
+
+(defn with-circuit-breaker*
+  "Functional core of `with-circuit-breaker`: runs `f` through `breaker`."
+  [breaker f]
+  (let [{permitted? ::permitted?} (allow! breaker)]
+    (if permitted?
+      (try
+        (let [result (f)]
+          (record! breaker :success)
+          result)
+        (catch Exception e
+          (record! breaker :failure)
+          (throw e)))
+      (throw (ex-info "again.core circuit breaker is open" {::circuit-open true})))))
+
+(defmacro with-circuit-breaker
+  "Run `body` through `breaker`. While the breaker is closed (or admitting a
+  half-open probe) the body executes and its success or failure is recorded
+  against the breaker. While the breaker is open the body is NOT executed; a
+  circuit-open exception (recognised by `circuit-open?`) is thrown instead.
+
+  Any thrown `Exception` counts as a failure: it is recorded against the breaker
+  and then rethrown.
+
+  Compose with `with-retries` by nesting, breaker innermost, so the breaker sees
+  every attempt:
+
+      (with-retries strategy
+        (with-circuit-breaker breaker
+          (do-call)))"
+  [breaker & body]
+  `(with-circuit-breaker* ~breaker (fn [] ~@body)))
+
+(defn circuit-open?
+  "True if `e` is the exception thrown when a call is short-circuited by an open
+  circuit breaker (see `with-circuit-breaker`)."
+  [e]
+  (boolean (::circuit-open (ex-data e))))

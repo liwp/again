@@ -579,3 +579,43 @@
 
   (testing "rejects a value that is not a BreakerPolicy"
     (is (thrown? AssertionError (a/circuit-breaker :not-a-policy)))))
+
+(deftest test-circuit-breaker-closed
+  (testing "a successful call returns its value and stays closed"
+    (let [cb (a/circuit-breaker (a/consecutive-failures 3))]
+      (is (= :ok (a/with-circuit-breaker cb :ok)))
+      (is (= :closed (a/circuit-state cb)))))
+
+  (testing "a failing call rethrows and stays closed below the threshold"
+    (let [cb   (a/circuit-breaker (a/consecutive-failures 3))
+          boom (Exception. "boom")]
+      (is (thrown? Exception (a/with-circuit-breaker cb (throw boom))))
+      (is (= :closed (a/circuit-state cb))))))
+
+(deftest test-circuit-breaker-trips-open
+  (let [cb   (a/circuit-breaker (a/consecutive-failures 2))
+        boom (Exception. "boom")
+        fail #(a/with-circuit-breaker cb (throw boom))]
+    (is (thrown? Exception (fail)))
+    (is (= :closed (a/circuit-state cb)) "one failure does not trip a threshold-2 breaker")
+    (is (thrown? Exception (fail)))
+    (is (= :open (a/circuit-state cb)) "the second consecutive failure trips it open")))
+
+(deftest test-circuit-breaker-success-resets-count
+  (let [cb   (a/circuit-breaker (a/consecutive-failures 2))
+        boom (Exception. "boom")]
+    (is (thrown? Exception (a/with-circuit-breaker cb (throw boom))))
+    (is (= :ok (a/with-circuit-breaker cb :ok)))
+    (is (thrown? Exception (a/with-circuit-breaker cb (throw boom))))
+    (is (= :closed (a/circuit-state cb)) "the success reset the count, so one failure does not trip")))
+
+(deftest test-circuit-breaker-open-short-circuits
+  (let [cb    (a/circuit-breaker (a/consecutive-failures 1))
+        boom  (Exception. "boom")
+        calls (atom 0)]
+    (is (thrown? Exception (a/with-circuit-breaker cb (throw boom))))
+    (is (= :open (a/circuit-state cb)))
+    (let [e (try (a/with-circuit-breaker cb (swap! calls inc) :never)
+                 (catch Exception ex ex))]
+      (is (a/circuit-open? e) "an open breaker throws a circuit-open exception")
+      (is (= 0 @calls) "the wrapped body is not executed while open"))))
