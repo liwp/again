@@ -578,7 +578,11 @@
                  (a/circuit-breaker (a/consecutive-failures 3) {::a/user-context :ctx})))))
 
   (testing "rejects a value that is not a BreakerPolicy"
-    (is (thrown? AssertionError (a/circuit-breaker :not-a-policy)))))
+    (is (thrown? AssertionError (a/circuit-breaker :not-a-policy))))
+
+  (testing "rejects a negative reset-timeout"
+    (is (thrown? AssertionError
+                 (a/circuit-breaker (a/consecutive-failures 3) {::a/reset-timeout -1})))))
 
 (deftest test-circuit-breaker-closed
   (testing "a successful call returns its value and stays closed"

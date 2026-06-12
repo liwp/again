@@ -258,7 +258,7 @@
   {:pre [(pos? threshold)]}
   (->ConsecutiveFailures threshold 0))
 
-(def ^:private default-reset-timeout
+(def default-reset-timeout
   "Default ms a breaker stays open before admitting a half-open probe."
   60000)
 
@@ -275,7 +275,8 @@
     `::user-context`   opaque value included in every `::on-event` map"
   ([policy] (circuit-breaker policy {}))
   ([policy options]
-   {:pre [(satisfies? BreakerPolicy policy)]}
+   {:pre [(satisfies? BreakerPolicy policy)
+          (>= (get options ::reset-timeout 0) 0)]}
    (cond-> {::reset-timeout (get options ::reset-timeout default-reset-timeout)
             ::on-event (get options ::on-event (constantly nil))
             ::state (atom {::circuit :closed ::policy policy ::opened-at nil})}
