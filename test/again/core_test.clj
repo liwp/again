@@ -407,7 +407,7 @@
     (testing "deadline exceeded after first failure stops retrying"
       (let [calls    (atom 0)
             {:keys [f attempts]} (new-failing-fn)]
-        (with-redefs [a/current-time-ms #(case (swap! calls inc) 1 0 11000)]
+        (with-redefs [a/current-time-ms #(case (long (swap! calls inc)) 1 0 11000)]
           (is (thrown? Exception
                        (with-retries (a/max-wall-clock-duration 10000 [100 100 100]) (f)))))
         (is (= @attempts 1) "only 1 attempt before wall-clock timeout fires")))
@@ -444,7 +444,7 @@
       (let [calls    (atom 0)
             {:keys [f]} (new-failing-fn)
             {:keys [args callback]} (new-callback-fn)]
-        (with-redefs [a/current-time-ms #(case (swap! calls inc) 1 0 11000)]
+        (with-redefs [a/current-time-ms #(case (long (swap! calls inc)) 1 0 11000)]
           (is (thrown? Exception
                        (with-retries (merge (a/max-wall-clock-duration 10000 [100 100])
                                             {::a/callback callback})
