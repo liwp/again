@@ -330,55 +330,57 @@
     :open
     {::next state ::transition nil}))
 
-(defn- allow!
-  "Atomically apply `decide-allow` to the breaker, retrying on contention.
-  Returns {::permitted? bool ::transition [from to]|nil}."
-  [breaker]
-  (let [a             (::state breaker)
-        reset-timeout (::reset-timeout breaker)]
+(defn- cas-step!
+  "Atomically transition the breaker's state with the pure `decide` fn
+  (state -> decision map containing ::next), retrying on contention. Returns the
+  decision without ::next."
+  [breaker decide]
+  (let [a (::state breaker)]
     (loop []
       (let [s        @a
-            decision (decide-allow s (current-time-ms) reset-timeout)
+            decision (decide s)
             next     (::next decision)]
         (if (or (identical? next s) (compare-and-set! a s next))
           (dissoc decision ::next)
           (recur))))))
 
+(defn- allow!
+  "Atomically apply `decide-allow` to the breaker.
+  Returns {::permitted? bool ::transition [from to]|nil}."
+  [breaker]
+  (let [reset-timeout (::reset-timeout breaker)]
+    (cas-step! breaker #(decide-allow % (current-time-ms) reset-timeout))))
+
 (defn- record!
-  "Atomically apply `decide-record` to the breaker, retrying on contention.
+  "Atomically apply `decide-record` to the breaker.
   Returns {::transition [from to]|nil}."
   [breaker outcome]
-  (let [a (::state breaker)]
-    (loop []
-      (let [s        @a
-            decision (decide-record s outcome (current-time-ms))
-            next     (::next decision)]
-        (if (or (identical? next s) (compare-and-set! a s next))
-          (dissoc decision ::next)
-          (recur))))))
+  (cas-step! breaker #(decide-record % outcome (current-time-ms))))
 
 (defn- emit!
   "Call the breaker's `::on-event` with `base`, adding `::user-context` if the
   breaker was configured with one."
   [breaker base]
   ((::on-event breaker)
-   (cond-> base
-     (contains? breaker ::user-context)
-     (assoc ::user-context (::user-context breaker)))))
+   (merge base (select-keys breaker [::user-context]))))
+
+(defn- emit-transition!
+  "Emit a `:state-change` event for `transition` ([from to]) if it is non-nil."
+  [breaker transition]
+  (when transition
+    (emit! breaker {::event :state-change ::from (first transition) ::to (second transition)})))
 
 (defn with-circuit-breaker*
   "Functional core of `with-circuit-breaker`: runs `f` through `breaker`."
   [breaker f]
   (let [{permitted? ::permitted? transition ::transition} (allow! breaker)]
-    (when transition
-      (emit! breaker {::event :state-change ::from (first transition) ::to (second transition)}))
+    (emit-transition! breaker transition)
     (if permitted?
       (try
         (let [result           (f)
               {t ::transition} (record! breaker :success)]
           (emit! breaker {::event :success})
-          (when t
-            (emit! breaker {::event :state-change ::from (first t) ::to (second t)}))
+          (emit-transition! breaker t)
           result)
         (catch InterruptedException e
           (.interrupt (Thread/currentThread))
@@ -386,8 +388,7 @@
         (catch Exception e
           (let [{t ::transition} (record! breaker :failure)]
             (emit! breaker {::event :failure ::exception e})
-            (when t
-              (emit! breaker {::event :state-change ::from (first t) ::to (second t)})))
+            (emit-transition! breaker t))
           (throw e)))
       (do
         (emit! breaker {::event :short-circuit})
