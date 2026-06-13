@@ -2,21 +2,36 @@
 
 [![CI](https://github.com/liwp/again/actions/workflows/ci.yml/badge.svg)](https://github.com/liwp/again/actions/workflows/ci.yml)
 
-A Clojure library for retrying an operation based on a retry strategy.
+A Clojure library for making operations resilient: **retrying** transient failures
+(`with-retries`) and **short-circuiting** persistently-failing dependencies
+(`with-circuit-breaker`).
+
+> **New in 2.0:** circuit breakers join retries as a first-class tool —
+> see [Circuit breakers](#circuit-breakers).
 
 ## Clojars
 
 ```clj
-[listora/again "1.0.0"]
+[listora/again "2.0.0"]
 ```
 
 With `deps.edn`:
 
 ```clj
-listora/again {:mvn/version "1.0.0"}
+listora/again {:mvn/version "2.0.0"}
 ```
 
 Requires Clojure 1.8 or later.
+
+## Upgrading to 2.0
+
+2.0 adds circuit breakers (see [Circuit breakers](#circuit-breakers)) alongside the
+existing retry API — existing `with-retries` code keeps working. The one breaking
+change is in the retry callback: `:again.core/status` can now also be `:interrupted`
+(when an `InterruptedException` stops retrying), in addition to `:success`, `:retry`,
+and `:failure`. If your callback dispatches exhaustively on the status without a
+`:default` case (e.g. a `defmulti` or `case` over `:again.core/status`), add an
+`:interrupted` branch.
 
 ## Development
 
@@ -68,6 +83,47 @@ Require the library:
 ```clj
 (require '[again.core :as again])
 ```
+
+*Again* provides two composable resilience tools:
+
+- **[Retries](#retries)** — retry an operation while it keeps throwing, following a
+  delay strategy (`with-retries`). For *transient* failures that are likely to pass
+  on a retry.
+- **[Circuit breakers](#circuit-breakers)** — stop calling a dependency that has been
+  failing consistently and fail fast until it recovers (`with-circuit-breaker`). For
+  *persistent* failures.
+
+The two are independent and **compose by nesting** — and the nesting order matters,
+because it decides what the breaker counts as a single failure:
+
+- **Breaker innermost** (retries on the outside): the breaker sees *every individual
+  attempt*, so a burst of retries against a sick dependency trips it quickly. This is
+  the recommended default.
+- **Breaker outermost** (retries on the inside): the breaker sees *one outcome per
+  fully-exhausted retry block*, so it counts whole logical operations, not attempts.
+
+A typical setup is breaker-innermost, paired with a retry callback that returns
+`::again/fail` on a circuit-open exception, so the retry loop stops the moment the
+breaker opens instead of sleeping through its remaining delays:
+
+```clj
+(def breaker
+  (again/circuit-breaker (again/consecutive-failures 5) {::again/reset-timeout 30000}))
+
+(again/with-retries
+  {::again/strategy (again/max-retries 10 (again/constant-strategy 100))
+   ;; once the breaker is open, stop retrying instead of waiting out the delays
+   ::again/callback (fn [{e ::again/exception}]
+                      (when (and e (again/circuit-open? e)) ::again/fail))}
+  (again/with-circuit-breaker breaker   ; ← innermost: the breaker counts every attempt
+    (call-some-service)))
+```
+
+Swap the two `with-…` forms and the breaker instead counts one failure per
+exhausted retry block. See [Retries](#retries) and [Circuit breakers](#circuit-breakers)
+for each tool on its own.
+
+## Retries
 
 *Again* provides a very simple (too simple?) API for retrying an operation:
 given a retry strategy and an operation, the operation will be retried according
@@ -252,7 +308,7 @@ first retry immediately:
   (cons 0 exponential-backoff-strategy))
 ```
 
-### Circuit breaker
+## Circuit breakers
 
 A circuit breaker short-circuits calls to a dependency that has been failing
 consistently, giving it time to recover and failing fast in the meantime. Construct
@@ -274,22 +330,50 @@ one breaker and share it across callers:
   (call-some-service))
 ```
 
-While the breaker is open, `with-circuit-breaker` throws instead of running the
-body; `(again/circuit-open? e)` recognises that exception, and
+Any exception the body throws counts as a failure, except `InterruptedException` —
+that is rethrown (with the interrupt flag restored) and is **not** counted. Once the
+breaker has been open for `::reset-timeout` milliseconds (default `60000`, also
+available as `again/default-reset-timeout`), it admits a single *half-open* probe: if
+the probe succeeds the breaker closes, if it fails the breaker re-opens for another
+timeout. While the breaker is open — or while a half-open probe is in flight —
+`with-circuit-breaker` short-circuits, throwing instead of running the body.
+`(again/circuit-open? e)` recognises that exception, and
 `(again/circuit-state breaker)` returns `:closed`, `:open`, or `:half-open`.
 
-Use retries and the breaker together by nesting, breaker innermost, so the breaker
-counts every attempt. A retry callback can stop early once the breaker opens:
+**Monitoring.** The `:again.core/on-event` callback (used above) is the observability
+hook. It fires after each notable event with a map whose `:again.core/event` is
+`:success`, `:failure`, `:short-circuit`, or `:state-change`; a `:state-change` also
+carries `:again.core/from`/`:again.core/to`, a `:failure` carries the
+`:again.core/exception`, and any configured `:again.core/user-context` rides along on
+every event. The breaker just emits these — feed them into your own logging or metrics
+(e.g. counting `:short-circuit` events shows how much load the breaker is shedding).
 
-```clj
-(again/with-retries
-  {:again.core/strategy (again/max-retries 10 (again/constant-strategy 100))
-   :again.core/callback (fn [{e :again.core/exception}]
-                          (when (and e (again/circuit-open? e))
-                            :again.core/fail))}
-  (again/with-circuit-breaker breaker
-    (call-some-service)))
-```
+**Custom trip behaviour.** `consecutive-failures` is the built-in policy, but *when a
+closed breaker trips* is pluggable: implement the `BreakerPolicy` protocol over an
+immutable value and pass it to `circuit-breaker` in place of `consecutive-failures`.
+Its three methods are:
+
+- `(observe [policy outcome now])` — return an updated policy for a `:success` or
+  `:failure` outcome
+- `(tripped? [policy now])` — whether the breaker should open
+- `(reset [policy])` — clear accumulated state when the breaker re-closes
+
+That's enough to plug in, say, a rolling-window or failure-rate policy. The
+open/half-open/closed state machine (including the single half-open probe) is
+unchanged — the policy only decides when a *closed* breaker trips.
+
+**API.**
+
+* `circuit-breaker` — construct a breaker from a `BreakerPolicy` and an options map
+  (`::reset-timeout`, `::on-event`, `::user-context`)
+* `with-circuit-breaker` — run a body through a breaker; short-circuits when open
+* `consecutive-failures` — the built-in `BreakerPolicy` (trip after N consecutive failures)
+* `circuit-open?` — whether an exception is the breaker's short-circuit signal
+* `circuit-state` — a breaker's current state: `:closed`, `:open`, or `:half-open`
+* `BreakerPolicy` — protocol for custom trip behaviour (`observe`/`tripped?`/`reset`)
+
+To combine a breaker with retries, see [Usage](#usage) — the nesting order matters,
+and breaker-innermost (so the breaker counts every attempt) is the usual choice.
 
 ## License
 
