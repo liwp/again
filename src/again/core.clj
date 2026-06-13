@@ -91,7 +91,7 @@
 
 (defn max-wall-clock-duration
   "Stop retrying once wall-clock time since the first attempt exceeds
-  timeout-ms. Unlike max-duration, this includes actual execution time,
+  `timeout` (ms). Unlike max-duration, this includes actual execution time,
   not just accumulated delays.
 
   Returns an options map for use with with-retries. Because it returns a
@@ -103,11 +103,11 @@
   ::callback and ::user-context, or ::wall-clock-timeout can be set
   directly in the options map passed to with-retries instead of using
   this function."
-  [timeout-ms retry-strategy]
-  {:pre [(>= timeout-ms 0)
+  [timeout retry-strategy]
+  {:pre [(>= timeout 0)
          (not (map? retry-strategy))]}
   {::strategy retry-strategy
-   ::wall-clock-timeout timeout-ms})
+   ::wall-clock-timeout timeout})
 
 (defn- sleep
   [delay]
