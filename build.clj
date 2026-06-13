@@ -21,7 +21,11 @@
                             :connection          "scm:git:git://github.com/liwp/again.git"
                             :developerConnection "scm:git:ssh://git@github.com/liwp/again.git"
                             :tag                 (str "v" version)}
-                :url       "https://github.com/liwp/again"})
+                :url       "https://github.com/liwp/again"
+                :pom-data  [[:licenses
+                             [:license
+                              [:name "Eclipse Public License 1.0"]
+                              [:url "https://www.eclipse.org/legal/epl-v10.html"]]]]})
   (b/copy-dir {:src-dirs   ["src"]
                :target-dir class-dir})
   (b/jar {:class-dir class-dir
