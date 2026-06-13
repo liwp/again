@@ -71,7 +71,7 @@ Release coordinate: `listora/again`. Releases are published to Clojars.
    a deploy token, not your account password), then run:
    ```sh
    clojure -T:build jar
-   clojure -T:build deploy
+   clojure -X:deploy
    ```
 
 ---

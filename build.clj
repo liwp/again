@@ -1,11 +1,12 @@
 (ns build
-  (:require [clojure.tools.build.api :as b]
-            [deps-deploy.deps-deploy :as dd]))
+  (:require [clojure.tools.build.api :as b]))
 
 (def lib 'listora/again)
 (def version "2.0.0")
 (def class-dir "target/classes")
-(def jar-file (format "target/%s-%s.jar" (name lib) version))
+;; Version-less jar name so the :deploy alias never needs a per-release edit;
+;; the published version comes from the embedded pom, not the filename.
+(def jar-file (format "target/%s.jar" (name lib)))
 
 (defn- basis []
   (b/create-basis {:project "deps.edn"}))
@@ -21,12 +22,7 @@
                             :developerConnection "scm:git:ssh://git@github.com/liwp/again.git"
                             :tag                 (str "v" version)}
                 :url       "https://github.com/liwp/again"})
-  (b/copy-src {:src-dirs  ["src"]
-               :class-dir class-dir})
+  (b/copy-dir {:src-dirs   ["src"]
+               :target-dir class-dir})
   (b/jar {:class-dir class-dir
           :jar-file  jar-file}))
-
-(defn deploy [_]
-  (dd/deploy {:installer :remote
-              :artifact  jar-file
-              :pom-file  (b/pom-path {:lib lib :class-dir class-dir})}))
