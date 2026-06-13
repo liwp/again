@@ -32,6 +32,14 @@
    :main-opts ["-m" "cljfmt.main" "fix" "src" "test" "build.clj" "deps.edn"]}
 
   :build
-  {:deps {org.clojure/tools.build {:mvn/version "0.9.2"}
-          slipset/deps-deploy     {:mvn/version "0.2.5"}}
-   :ns-default build}}}
+  {:deps {org.clojure/tools.build {:mvn/version "0.9.2"}}
+   :ns-default build}
+
+  ;; Deploy to Clojars: `clojure -X:deploy` (needs CLOJARS_USERNAME /
+  ;; CLOJARS_PASSWORD). Kept separate from :build so deps-deploy and tools.build
+  ;; never share a classpath — co-locating them clashes their tools.deps
+  ;; versions ("No such var: specs/valid-deps?").
+  :deploy
+  {:replace-deps {slipset/deps-deploy {:mvn/version "0.2.5"}}
+   :exec-fn deps-deploy.deps-deploy/deploy
+   :exec-args {:installer :remote :artifact "target/again.jar"}}}}
