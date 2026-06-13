@@ -32,7 +32,7 @@
    :main-opts ["-m" "cljfmt.main" "fix" "src" "test" "build.clj" "deps.edn"]}
 
   :build
-  {:deps {org.clojure/tools.build {:mvn/version "0.9.2"}}
+  {:deps {io.github.clojure/tools.build {:mvn/version "0.10.14"}}
    :ns-default build}
 
   ;; Deploy to Clojars: `clojure -X:deploy` (needs CLOJARS_USERNAME /
