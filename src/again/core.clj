@@ -399,7 +399,9 @@
   "Run `body` through `breaker`. While the breaker is closed (or admitting a
   half-open probe) the body executes and its success or failure is recorded
   against the breaker. While the breaker is open the body is NOT executed; a
-  circuit-open exception (recognised by `circuit-open?`) is thrown instead.
+  circuit-open exception (recognised by `circuit-open?`) is thrown instead. Once
+  the breaker has been open for `::reset-timeout` ms it admits a single half-open
+  probe: a successful probe closes the breaker, a failed one re-opens it.
 
   Any thrown `Exception` counts as a failure: it is recorded against the breaker
   and then rethrown — except `InterruptedException`, which is rethrown with the
