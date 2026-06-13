@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-06-13
+## [2.0.1] - 2026-06-14
+
+2.0.0 was tagged but never published to Clojars (a release-tooling issue); 2.0.1 is
+the first 2.x release and carries the changes below.
 
 ### Added
 - `max-wall-clock-duration` manipulator: stops retrying once wall-clock elapsed
@@ -37,6 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial stable release.
 
-[Unreleased]: https://github.com/liwp/again/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/liwp/again/compare/v1.0.0...v2.0.0
+[Unreleased]: https://github.com/liwp/again/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/liwp/again/compare/v1.0.0...v2.0.1
 [1.0.0]: https://github.com/liwp/again/releases/tag/v1.0.0

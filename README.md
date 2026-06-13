@@ -12,13 +12,13 @@ A Clojure library for making operations resilient: **retrying** transient failur
 ## Clojars
 
 ```clj
-[listora/again "2.0.0"]
+[listora/again "2.0.1"]
 ```
 
 With `deps.edn`:
 
 ```clj
-listora/again {:mvn/version "2.0.0"}
+listora/again {:mvn/version "2.0.1"}
 ```
 
 Requires Clojure 1.8 or later.

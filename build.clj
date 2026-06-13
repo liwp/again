@@ -2,7 +2,7 @@
   (:require [clojure.tools.build.api :as b]))
 
 (def lib 'listora/again)
-(def version "2.0.0")
+(def version "2.0.1")
 (def class-dir "target/classes")
 ;; Version-less jar name so the :deploy alias never needs a per-release edit;
 ;; the published version comes from the embedded pom, not the filename.
