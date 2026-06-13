@@ -42,4 +42,6 @@
   :deploy
   {:replace-deps {slipset/deps-deploy {:mvn/version "0.2.5"}}
    :exec-fn deps-deploy.deps-deploy/deploy
-   :exec-args {:installer :remote :artifact "target/again.jar"}}}}
+   :exec-args {:installer :remote
+               :artifact "target/again.jar"
+               :pom-file "target/classes/META-INF/maven/listora/again/pom.xml"}}}}
