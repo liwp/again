@@ -3,7 +3,7 @@
  ;; Library coordinate: listora/again
  ;; Current release: 2.0.0
  ;; Release target: Clojars
- :deps {org.clojure/clojure {:mvn/version "1.12.5"}}
+ :deps {org.clojure/clojure {:mvn/version "1.12.6"}}
 
  :aliases
  {:dev
